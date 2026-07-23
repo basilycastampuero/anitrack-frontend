@@ -85,6 +85,24 @@ VITE_API_MODE=real VITE_ODOO_URL=http://odoo:8069 docker compose up frontend
 (`odoo` es el nombre del servicio en la red interna de Compose — no
 `localhost`, porque el proxy corre dentro del contenedor del frontend.)
 
+Odoo queda accesible en [http://localhost:8069](http://localhost:8069), DB
+`anitrack`, login `admin` / password `admin` (credenciales por defecto que
+genera Odoo al crear la base por línea de comandos — cambiarlas no es
+necesario para un entorno local).
+
+**Nota sobre `docker-init/odoo-dev-entrypoint.sh`:** el `entrypoint.sh`
+original de `ll-odoo/` usa `--init=all`, que en Odoo **no** instala todos los
+módulos disponibles — solo `base` y los módulos con `auto_install=True`
+(`web`, `bus`, etc.). Los módulos propios del proyecto (`ll_checklist`,
+`ll_oauth`, `ll_webpage`) tienen `auto_install=False`, así que con el
+entrypoint original nunca quedaban instalados. Por eso el servicio `odoo` en
+`docker-compose.yml` monta un entrypoint propio
+(`docker-init/odoo-dev-entrypoint.sh`, fuera de `ll-odoo/`) que instala esos
+tres módulos explícitamente con `-i`; es idempotente, así que reiniciar el
+contenedor es rápido (~2s) una vez que la base ya existe — nada que ver con
+la lentitud que reporta Chano en Railway, que usa el `entrypoint.sh` original
+tal cual.
+
 ### Build de producción (nginx)
 
 ```bash

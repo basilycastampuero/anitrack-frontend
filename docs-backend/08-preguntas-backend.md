@@ -52,11 +52,20 @@
    - 3.1. **Self-hosted (VPS/servidor propio donde vos administrás nginx/Caddy)**
      o **Odoo.sh** (u otro hosting gestionado por Odoo)? Esto es lo que más me
      importa de toda esta sección — ver pregunta 4.
-     → Respuesta: ___
+     → Respuesta: Self-hosted en Railway: un contenedor Docker de Odoo
+     Community conectado a otro contenedor de Postgres, ambos en Railway.
+     Puede crear fácilmente una BD de pruebas y una de producción ahí. No usa
+     Odoo.sh.
    - 3.2. URL de producción y, si existe, de staging. ¿Puedo apuntar un entorno
      de desarrollo (Vite dev server) contra el staging mientras no haya
      endpoints propios listos?
-     → Respuesta: ___
+     → Respuesta: No habrá staging remoto cómodo para probar contra él.
+     Railway es su entorno de producción y reiniciar un servicio ahí demora
+     mucho, así que no es ágil para iterar. Podría enlazar una rama a un
+     servicio de Railway para que probemos, pero prefiere que instalemos
+     Odoo localmente. Es Odoo 17 Community: viene con Postgres embebido, o si
+     ya tenés Postgres propio corriendo se configura para no instalar uno
+     duplicado.
    - 3.3. ¿Quién administra el dominio y el DNS? (sé que el dominio lo vas a
      comprar vos — pregunto por si el hosting elegido impone restricciones
      sobre cómo se enruta ese dominio, independientemente de quién sea el dueño).
