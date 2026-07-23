@@ -19,6 +19,7 @@ Los números de archivo son los de la numeración original de planificación (ve
 empezó (respondió la sección de hosting/deploy: Railway self-hosted, sin
 staging remoto cómodo, frontend debe correr contra Odoo local), pero faltan
 las demás secciones (transporte de API, CORS/deploy, auth, campos [EXT]),
-algunas bloqueantes para el Sprint 3 (OAuth de Twitch). Mientras tanto, el
+algunas bloqueantes para el Sprint 3a (tarea 3.3, OAuth de Twitch) y para el
+Sprint 4 (tarea 4.1, integración real). Mientras tanto, el
 frontend construye contra MSW sin depender de esto (ADR-001 en
 [`../docs/03-decisiones-arquitectura.md`](../docs/03-decisiones-arquitectura.md)).

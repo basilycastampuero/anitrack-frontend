@@ -16,9 +16,10 @@
 | 0.2 | Validar decisiones de docs 03–06 con vos (dueño) | ADRs marcados aceptados/ajustados | ✅ |
 | 0.3 | Crear repo `anitrack-frontend` en GitHub | Repo con README apuntando a estos docs | ✅ `basilycastampuero/anitrack-frontend` — en la cuenta **principal**, no en la secundaria que preveía esta tarea (motivo en [10-sprint2-avance.md](./10-sprint2-avance.md)). `main` y `sprint-2-catalogo` pusheadas |
 
-> ⚠️ **0.1 es el bloqueo #1 y sigue abierto.** Mientras no haya respuestas de
-> transporte y auth, las tareas 2.8, 3.3 y 4.1 no tienen insumo. No bloquea el
-> resto del plan (MSW cubre el 100%), pero cuanto más tarde lleguen las
+> ⚠️ **0.1 es el bloqueo #1 y sigue abierto.** Sin las respuestas de transporte
+> y auth, las tareas 3.3 (OAuth Twitch) y 4.1 (integración real) no tienen
+> insumo. No bloquea el resto del plan (MSW cubre el 100%) y el spike 2.8 ya se
+> puede hacer contra el Odoo local, pero cuanto más tarde lleguen las
 > respuestas, más caro sale el adaptador del Sprint 4.
 
 ## Sprint 1 — Fundaciones (semanas 1–2)
@@ -145,7 +146,7 @@ path.
 | Riesgo | Prob. | Impacto | Mitigación |
 |---|---|---|---|
 | El dev backend no implementa la API a tiempo | Alta | Alto | MSW cubre el 100%; el deliverable de portafolio no depende de Odoo; demo con `VITE_API_MODE=mock` |
-| **El doc 08 no se responde nunca** (materializándose: solo la sección de hosting tiene respuesta) | Alta | Medio | 2.8, 3.3 y 4.1 se marcan ⛔ y no se planifican hasta tener insumo; el resto del plan avanza igual. Fecha límite propia: si a fin del Sprint 3a no hay respuestas de transporte/auth, se congela 4.1 y el deliverable queda 100% mock |
+| **El doc 08 no se responde nunca** (materializándose: solo la sección de hosting tiene respuesta) | Alta | Medio | 3.3 y 4.1 no se planifican hasta tener insumo; el resto avanza igual. El spike 2.8 contra el Odoo local reemplaza parte de las respuestas (el transporte se descubre leyendo el backend). Fecha límite propia: si a fin del Sprint 3a no hay respuestas de auth, se congela 4.1 y el deliverable queda 100% mock |
 | El contrato real difiere del propuesto | Media | Medio | Adaptador aislado + schemas Zod detectan drift en runtime |
 | Modelo Odoo cambia (rama activa) | Media | Medio | Contrato acordado temprano (Fase 0); re-mapear solo en adaptador |
 | CORS/cookies bloquean integración | Media | Alto | ADR-005 same-origin por proxy; plan B CORS documentado |

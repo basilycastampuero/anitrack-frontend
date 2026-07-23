@@ -61,6 +61,14 @@ tiene las preguntas listas para enviar. Mientras tanto, MSW permite construir el
 - [x] **Sprint 1 del frontend completado** — ver [09-sprint1-completado.md](./09-sprint1-completado.md)
 - [ ] Conversación con Chano (usar [`../docs-backend/08-preguntas-backend.md`](../docs-backend/08-preguntas-backend.md)) — en curso: respondió hosting, faltan las demás secciones
 - [x] Repo remoto del frontend creado y pusheado en GitHub (`basilycastampuero/anitrack-frontend`, cuenta principal — Fase 0.3, ver [10-sprint2-avance.md](./10-sprint2-avance.md))
-- [ ] Sprint 2 — catálogo completo — en curso, ver [10-sprint2-avance.md](./10-sprint2-avance.md)
-- [ ] Sprint 3 — auth + listas + tracking
+- [ ] Sprint 2 — catálogo completo — en curso, ver [10-sprint2-avance.md](./10-sprint2-avance.md). Camino crítico: tarea 2.3 (página de catálogo real) + el componente `FilterBar` que le falta a 2.2
+- [ ] Sprint 3a — auth + estructura de listas
+- [ ] Sprint 3b — tracking y vinculación
 - [ ] Sprint 4 — integración, pulido y deploy
+
+> El Sprint 3 se partió en **3a** (auth + listas) y **3b** (tracking + wizard):
+> con 11 tareas era casi el doble de carga que cualquier otro sprint, y las más
+> riesgosas del proyecto. El corte, el orden de ejecución y el orden de recorte
+> si aprieta el plazo están en [07-plan-de-trabajo.md](./07-plan-de-trabajo.md).
+> La numeración de tareas (3.1–3.11) se conservó para no invalidar las
+> referencias cruzadas de los demás documentos.
