@@ -16,5 +16,9 @@ Los números de archivo son los de la numeración original de planificación (ve
 [`../docs/README.md`](../docs/README.md)), no correlativos dentro de esta carpeta.
 
 **Estado:** bloqueo #1 del proyecto — la conversación con Chano usando el doc 08
-todavía no se dio. Mientras tanto, el frontend construye contra MSW sin
-depender de esto (ADR-001 en [`../docs/03-decisiones-arquitectura.md`](../docs/03-decisiones-arquitectura.md)).
+empezó (respondió la sección de hosting/deploy: Railway self-hosted, sin
+staging remoto cómodo, frontend debe correr contra Odoo local), pero faltan
+las demás secciones (transporte de API, CORS/deploy, auth, campos [EXT]),
+algunas bloqueantes para el Sprint 3 (OAuth de Twitch). Mientras tanto, el
+frontend construye contra MSW sin depender de esto (ADR-001 en
+[`../docs/03-decisiones-arquitectura.md`](../docs/03-decisiones-arquitectura.md)).

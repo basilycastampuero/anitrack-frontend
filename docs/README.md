@@ -18,6 +18,7 @@
 | [06-diseno-ui.md](./06-diseno-ui.md) | Rutas, páginas, componentes, design system, flujos UX |
 | [07-plan-de-trabajo.md](./07-plan-de-trabajo.md) | Plan detallado por fases/sprints con tareas y criterios de aceptación |
 | [09-sprint1-completado.md](./09-sprint1-completado.md) | Bitácora: qué se construyó en el setup/Sprint 1, decisiones tomadas sobre la marcha y verificación |
+| [10-sprint2-avance.md](./10-sprint2-avance.md) | Bitácora: avance del Sprint 2 (catálogo) en curso — estado real por tarea, decisiones sobre la marcha y verificación |
 | [anitrack_ai_context.md](./anitrack_ai_context.md) | Brief original del proyecto (visión tipo MyAnimeList). Referencia histórica: el backend real NO implementa este modelo tal cual — ver el gap en [`../docs-backend/02-analisis-backend-odoo.md`](../docs-backend/02-analisis-backend-odoo.md) |
 
 Los números de archivo (01, 03...) se conservan de la numeración original de
@@ -58,8 +59,8 @@ tiene las preguntas listas para enviar. Mientras tanto, MSW permite construir el
 - [x] Decisiones de arquitectura tomadas
 - [x] Contrato API v1 redactado
 - [x] **Sprint 1 del frontend completado** — ver [09-sprint1-completado.md](./09-sprint1-completado.md)
-- [ ] Conversación con Chano (usar [`../docs-backend/08-preguntas-backend.md`](../docs-backend/08-preguntas-backend.md))
-- [x] Repo remoto del frontend inicializado localmente (Fase 0.3) — falta crear el remoto en GitHub y hacer el primer push
-- [ ] Sprint 2 — catálogo completo
+- [ ] Conversación con Chano (usar [`../docs-backend/08-preguntas-backend.md`](../docs-backend/08-preguntas-backend.md)) — en curso: respondió hosting, faltan las demás secciones
+- [x] Repo remoto del frontend creado y pusheado en GitHub (`basilycastampuero/anitrack-frontend`, cuenta principal — Fase 0.3, ver [10-sprint2-avance.md](./10-sprint2-avance.md))
+- [ ] Sprint 2 — catálogo completo — en curso, ver [10-sprint2-avance.md](./10-sprint2-avance.md)
 - [ ] Sprint 3 — auth + listas + tracking
 - [ ] Sprint 4 — integración, pulido y deploy
