@@ -1,16 +1,25 @@
 # 07 — Plan de Trabajo Detallado
 
-> 4 sprints de ~2 semanas (ajustable a 1 semana c/u si el plazo es 1 mes).
-> Cada tarea tiene criterio de aceptación (CA). El orden dentro de un sprint es
-> el orden recomendado de ejecución. ⚠️ = depende de respuesta del dev backend.
+> 5 bloques de ~2 semanas (S1, S2, S3a, S3b, S4). Cada tarea tiene criterio de
+> aceptación (CA). El orden dentro de un sprint es el orden recomendado de
+> ejecución. ⚠️ = depende de respuesta del dev backend.
+>
+> **Leyenda de estado:** ✅ hecho · 🟡 en curso · ⬜ no empezado · ⛔ bloqueado.
+> **Leyenda de prioridad:** 🔴 núcleo (sin esto no hay producto) · 🟡 importante
+> · ⚪ recortable si aprieta el plazo.
 
 ## Fase 0 — Preparación (antes o durante el arranque del Sprint 1)
 
-| # | Tarea | CA |
-|---|---|---|
-| 0.1 | Enviar doc 08 al dev de Odoo | Respuestas registradas en el propio doc |
-| 0.2 | Validar decisiones de docs 03–06 con vos (dueño) | ADRs marcados aceptados/ajustados |
-| 0.3 | Crear repo `anitrack-frontend` en GitHub (cuenta secundaria, ver ssh alias `github.com-segundo`) | Repo con README apuntando a estos docs |
+| # | Tarea | CA | Estado |
+|---|---|---|---|
+| 0.1 | Enviar doc 08 al dev de Odoo | Respuestas registradas en el propio doc | 🟡 **Parcial** — solo respondidas las de *Deploy/hosting* (Railway, sin staging). Transporte/API, Auth y Modelo de datos siguen sin respuesta |
+| 0.2 | Validar decisiones de docs 03–06 con vos (dueño) | ADRs marcados aceptados/ajustados | ✅ |
+| 0.3 | Crear repo `anitrack-frontend` en GitHub | Repo con README apuntando a estos docs | ✅ `basilycastampuero/anitrack-frontend` — en la cuenta **principal**, no en la secundaria que preveía esta tarea (motivo en [10-sprint2-avance.md](./10-sprint2-avance.md)). `main` y `sprint-2-catalogo` pusheadas |
+
+> ⚠️ **0.1 es el bloqueo #1 y sigue abierto.** Mientras no haya respuestas de
+> transporte y auth, las tareas 2.8, 3.3 y 4.1 no tienen insumo. No bloquea el
+> resto del plan (MSW cubre el 100%), pero cuanto más tarde lleguen las
+> respuestas, más caro sale el adaptador del Sprint 4.
 
 ## Sprint 1 — Fundaciones (semanas 1–2)
 
@@ -39,43 +48,75 @@
 **Objetivo demo:** explorar el catálogo de punta a punta (grid → franquicia →
 contenido → versiones), buscar, filtrar. Todo con MSW.
 
-| # | Tarea | Detalle | CA |
-|---|---|---|---|
-| 2.1 | `catalog.service` + hooks | `useFranchiseList(filters)`, `useFranchiseDetail(id)`, `useSearch(q)` | Tests con MSW |
-| 2.2 | FilterBar + estado en URL | hook `useCatalogFilters()` sobre searchParams | Refresh conserva filtros; back/forward OK |
-| 2.3 | Página catálogo | Grid + paginación + skeleton + empty | Los 4 estados (loading/data/empty/error) demostrables |
-| 2.4 | Detalle franquicia | Header, tabs V/G, ContentSection, tabla de versiones | Con seed multi-versión y episodios desconocidos |
-| 2.5 | Detalle contenido | Ruta propia/modal-route | Deep-link directo funciona |
-| 2.6 | SearchBar global | Debounce + dropdown + teclado + página resultados | Test de debounce e interacción |
-| 2.7 | Galería de imágenes | Colapsable, lazy | — |
-| 2.8 | ⚠️ Spike integración real | Si ya hay respuestas del backend: probar 1 endpoint real (franchises) vía proxy de Vite | Decisión documentada: adaptador necesario sí/no |
+| # | Tarea | Detalle | CA | Estado |
+|---|---|---|---|---|
+| 2.1 | `catalog.service` + hooks | `useFranchiseList(filters)`, `useFranchiseDetail(id)`, `useSearch(q)` | Tests con MSW | ✅ (cerrada ya en Sprint 1) + `useGenres`/`usePlatforms` |
+| 2.2 | FilterBar + estado en URL | hook `useCatalogFilters()` sobre searchParams | Refresh conserva filtros; back/forward OK | 🟡 hook + 5 tests hechos; falta el componente `FilterBar` |
+| 2.3 | Página catálogo | Grid + paginación + skeleton + empty | Los 4 estados (loading/data/empty/error) demostrables | ⬜ **camino crítico** — `CatalogPage` sigue siendo placeholder |
+| 2.4 | Detalle franquicia | Header, tabs V/G, ContentSection, tabla de versiones | Con seed multi-versión y episodios desconocidos | ⬜ |
+| 2.5 | Detalle contenido | Ruta propia/modal-route | Deep-link directo funciona | ⬜ |
+| 2.6 | SearchBar global | Debounce + dropdown + teclado + página resultados | Test de debounce e interacción | ⬜ |
+| 2.7 | Galería de imágenes | Colapsable, lazy | — | ⬜ |
+| 2.8 | ⚠️ Spike integración real | Probar 1 endpoint real (franchises) vía proxy de Vite contra el **Odoo local** (`docker compose --profile backend up`) | Decisión documentada: adaptador necesario sí/no | ⬜ ya no depende de Chano — el entorno local existe (doc 09), falta ejecutarlo |
 
 **Conceptos:** searchParams como estado; `keepPreviousData`/`placeholderData`
 para paginación sin parpadeo; prefetch on-hover de cards.
 
-## Sprint 3 — Auth + Listas + Tracking (semanas 5–6) — el corazón
+## Sprint 3 — el corazón, partido en dos
 
-**Objetivo demo:** login, crear listas, vincular una versión desde el catálogo,
-subir progreso con optimistic update, ver perfil público.
+El Sprint 3 original tenía 11 tareas, y las más pesadas del proyecto (auth,
+árbol accesible, optimistic updates, wizard de 3 caminos). Se parte en **3a** y
+**3b**, cada uno con su propio objetivo demo. **La numeración 3.1–3.11 se
+conserva** para que las referencias cruzadas de los otros docs sigan siendo
+válidas.
+
+El corte está donde la app cambia de naturaleza: al terminar 3a existe sesión y
+listas navegables (un CRUD); en 3b aparece el tracking, que es el valor real
+del producto y donde vive todo el riesgo técnico (optimistic + rollback).
+
+### Sprint 3a — Auth + estructura de listas (semanas 5–6)
+
+**Objetivo demo:** iniciar sesión, crear y organizar listas propias, ver sus
+entries (todavía sin poder modificar progreso).
 
 | # | Tarea | Detalle | CA |
 |---|---|---|---|
 | 3.1 | `auth.service` + store sesión | login/logout/me; Zustand `sessionStore`; `<RequireAuth>` | Redirect a login y `next=` funcionan |
 | 3.2 | Páginas login/register | RHF + Zod, errores de API en el form | Estados: éxito, credenciales malas, server error |
-| 3.3 | ⚠️ Callback OAuth Twitch | Según respuesta backend; con MSW se simula | Flujo mock completo |
 | 3.4 | `lists.service` + hooks | CRUD checklists, entries, links, library-index | Tests |
 | 3.5 | ChecklistTree | Árbol accesible + CRUD carpetas + onboarding "starter lists" | Crear/renombrar/borrar/publicar con optimistic |
 | 3.6 | Vista de entries | `ListEntryRow` + `FranchiseEntryGroup` + `ProgressBar` | Agregación `[S1 12/12]` renderiza igual que Odoo |
-| 3.7 | `EpisodeStepper` optimistic | Patrón onMutate/rollback; también en card de detalle | Corte de red simulado → rollback + toast |
-| 3.8 | `LinkWizard` | Flujo completo del doc 06 incl. ALREADY_LINKED y synced copy | Los 3 caminos demostrables |
-| 3.9 | `library-index` en catálogo | Cards muestran "in your list" | Se actualiza al agregar/quitar |
-| 3.10 | Perfil público + stats | StatsGrid client-side v1 | Perfil vacío (EmptyState) y poblado |
-| 3.11 | RatingStars + notas [flag] | ADR-004; visible solo con flag | Flag off ⇒ ni rastro en la UI |
+| 3.3 | ⚠️ Callback OAuth Twitch | Según respuesta backend; con MSW se simula | Flujo mock completo |
 
-**Conceptos:** optimistic updates en profundidad; auth por cookie en SPA
-(por qué no localStorage tokens); invalidación selectiva de queries.
+> 3.3 va **al final** del sprint a propósito: depende de la Fase 0.1, que sigue
+> abierta. Con login por credenciales (3.1/3.2) el sprint ya cumple su objetivo
+> demo; si no hay respuesta de Chano, 3.3 se corre a 3b sin costo.
 
-## Sprint 4 — Integración, pulido y deploy (semanas 7–8)
+**Conceptos:** auth por cookie en SPA (por qué no localStorage tokens);
+invalidación selectiva de queries; árboles accesibles (roles ARIA `tree`).
+
+### Sprint 3b — Tracking y vinculación (semanas 7–8)
+
+**Objetivo demo:** vincular una versión desde el catálogo, subir progreso con
+optimistic update, ver el perfil público con stats.
+
+| # | Tarea | Detalle | CA | Prioridad |
+|---|---|---|---|---|
+| 3.7 | `EpisodeStepper` optimistic | Patrón onMutate/rollback; también en card de detalle | Corte de red simulado → rollback + toast | 🔴 núcleo |
+| 3.8 | `LinkWizard` | Flujo completo del doc 06 incl. ALREADY_LINKED y synced copy | Los 3 caminos demostrables | 🔴 núcleo |
+| 3.9 | `library-index` en catálogo | Cards muestran "in your list" | Se actualiza al agregar/quitar | 🟡 importante |
+| 3.10 | Perfil público + stats | StatsGrid client-side v1 | Perfil vacío (EmptyState) y poblado | 🟡 importante |
+| 3.11 | RatingStars + notas [flag] | ADR-004; visible solo con flag | Flag off ⇒ ni rastro en la UI | ⚪ recortable |
+
+3.7 y 3.8 son el producto: sin ellos AniTrack es un catálogo con listas vacías.
+Si el sprint se desborda, lo que se recorta es 3.11 primero y 3.10 después
+(el perfil puede quedar en v1 mínimo sin StatsGrid).
+
+**Conceptos:** optimistic updates en profundidad (onMutate / onError / rollback
+/ onSettled); por qué el rollback es la parte que hay que testear, no el happy
+path.
+
+## Sprint 4 — Integración, pulido y deploy (semanas 9–10)
 
 | # | Tarea | Detalle | CA |
 |---|---|---|---|
@@ -104,8 +145,9 @@ subir progreso con optimistic update, ver perfil público.
 | Riesgo | Prob. | Impacto | Mitigación |
 |---|---|---|---|
 | El dev backend no implementa la API a tiempo | Alta | Alto | MSW cubre el 100%; el deliverable de portafolio no depende de Odoo; demo con `VITE_API_MODE=mock` |
+| **El doc 08 no se responde nunca** (materializándose: solo la sección de hosting tiene respuesta) | Alta | Medio | 2.8, 3.3 y 4.1 se marcan ⛔ y no se planifican hasta tener insumo; el resto del plan avanza igual. Fecha límite propia: si a fin del Sprint 3a no hay respuestas de transporte/auth, se congela 4.1 y el deliverable queda 100% mock |
 | El contrato real difiere del propuesto | Media | Medio | Adaptador aislado + schemas Zod detectan drift en runtime |
 | Modelo Odoo cambia (rama activa) | Media | Medio | Contrato acordado temprano (Fase 0); re-mapear solo en adaptador |
 | CORS/cookies bloquean integración | Media | Alto | ADR-005 same-origin por proxy; plan B CORS documentado |
 | Scope creep del brief (reviews, recomendaciones) | Media | Medio | Doc 01 fija alcance; extras = v2 |
-| Plazo de 1 mes en vez de 2 | — | Alto | Prioridad estricta: S1→S3 son el producto; S4 recortable (deploy mínimo + pulido esencial) |
+| Plazo más corto que las 10 semanas del plan | — | Alto | Orden de recorte explícito: primero los ⚪ (3.11, 4.9, 4.10), después los 🟡 de S3b (3.10, 3.9), después S4 al mínimo (4.1 fuera + deploy + README). S1→S3b son el producto y no se tocan |
