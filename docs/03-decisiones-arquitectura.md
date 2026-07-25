@@ -107,26 +107,46 @@ muestra controles muertos; hay un camino claro para activarlo.
 
 **Contexto.** Odoo maneja sesiones con cookie (`session_id`). No emite CORS
 headers por defecto. El OAuth de Twitch ya funciona server-side en Odoo (flujo
-redirect). Una SPA en otro dominio complicaría cookies cross-site (SameSite).
+redirect). Odoo está self-hosted en Railway (contenedor + Postgres); el frontend
+estático irá en Vercel/Netlify. **Dato que define la topología (2026-07-24):** el
+dominio es pagado exclusivamente para este proyecto y AniTrack es un solo
+producto, así que backend y frontend cuelgan del **mismo dominio registrado** →
+la cookie de sesión es *first-party* y evitamos por completo el escenario frágil
+de dos dominios sin relación (`*.vercel.app` + `*.railway.app`), que obligaría a
+`SameSite=None` (cookie third-party, cada vez más bloqueada por los navegadores).
 
-**Decisión.**
-1. **Same-origin en producción**: la SPA y la API se sirven bajo el mismo dominio
-   vía reverse proxy (ej.: frontend estático en `/`, Odoo bajo `/api` y
-   `/web/image`; o rewrites de Vercel/Netlify hacia el host de Odoo). Así la
-   cookie de sesión funciona sin pelear con CORS/SameSite.
-2. **Login email/password**: endpoint de sesión (nativo
+**Decisión — topología de deploy, en orden de preferencia.**
+1. **[Primaria] Vercel sirve el frontend y hace de proxy de `/api`** (`rewrites`
+   de `vercel.json` / redirects `200` de Netlify hacia el host de Odoo en
+   Railway). El navegador ve **un solo origen** → sin CORS y con cookie
+   first-party. Ventaja extra: se comporta **igual que el proxy de Vite en dev**,
+   así no hay sorpresas "anda en local, falla en prod". Chano no configura nada.
+2. **[Alternativa] Subdominios del mismo dominio**: `www.…` → Vercel,
+   `api.…` → Railway. Cookie sigue first-party (mismo *site*), pero como son
+   *orígenes* distintos **sí hace falta CORS** (`Allow-Origin` = origen exacto +
+   `Allow-Credentials: true`) — eso lo configura Chano en los controladores.
+3. **[Plan B] CORS puro con dominios no relacionados**: solo si se cae la idea
+   del dominio compartido. Implica `SameSite=None; Secure` (cookie third-party,
+   frágil). Es el último recurso.
+
+Concepto a no confundir: **same-site** (mismo dominio registrado → importa a las
+*cookies*) ≠ **same-origin** (mismo esquema+host+puerto → importa a *CORS*).
+
+**Decisión — auth (independiente de la topología).**
+4. **Login email/password**: endpoint de sesión (nativo
    `/web/session/authenticate` o wrapper custom `/api/auth/login`) → cookie.
-3. **Login Twitch**: link a la ruta OAuth de Odoo (`/auth_oauth/signin` flow) con
+5. **Login Twitch**: link a la ruta OAuth de Odoo (`/auth_oauth/signin` flow) con
    `redirect` de vuelta a la SPA; al volver, la SPA llama `GET /api/auth/me`.
-4. En dev: proxy de Vite (`server.proxy`) hacia el Odoo local/remoto, o MSW.
-5. Axios con `withCredentials: true`; interceptor 401 → redirigir a login y
+6. En dev: proxy de Vite (`server.proxy`) hacia el Odoo local/remoto, o MSW.
+7. Axios con `withCredentials: true`; interceptor 401 → redirigir a login y
    limpiar store.
 
 **Consecuencias.** Cero manejo de tokens en el frontend (más simple y más
-seguro: cookie HttpOnly); requisito de deploy documentado para el dev backend
-(doc 08, preguntas 3–6). Si el deploy same-origin resultara imposible, plan B:
-CORS con `credentials` + `SameSite=None` (los controladores custom de Odoo
-aceptan un parámetro `cors`).
+seguro: cookie HttpOnly). La topología es una decisión **de producción**: en dev
+está insulada por el proxy de Vite + MSW, así que no bloquea construir. La
+opción 1 no requiere nada de Chano; la 2 sí (CORS). Ninguna suma un servicio
+pago — el único descartado por costo era un contenedor proxy (nginx/Caddy)
+dedicado en Railway. Ver doc 08, pregunta 4.
 
 ---
 
