@@ -6,6 +6,7 @@ import { t } from '@/i18n/en'
 import { ThemeToggle } from '@/components/layout/ThemeToggle'
 import { UserAvatar } from '@/components/common/UserAvatar'
 import { Button } from '@/components/ui/button'
+import { SearchBar } from '@/features/catalog/components/SearchBar'
 import { useSessionStore } from '@/store/sessionStore'
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
@@ -37,15 +38,8 @@ export function Header() {
           </NavLink>
         </nav>
 
-        {/* Placeholder de SearchBar (la funcional llega en Sprint 2). */}
         <div className="ml-auto hidden max-w-sm flex-1 md:block">
-          <Link
-            to={paths.search}
-            className="flex items-center gap-2 rounded-md border border-input bg-secondary/40 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-secondary"
-          >
-            <Search className="size-4" aria-hidden />
-            {t.common.search}
-          </Link>
+          <SearchBar />
         </div>
 
         <div className="ml-auto flex items-center gap-1 md:ml-0">

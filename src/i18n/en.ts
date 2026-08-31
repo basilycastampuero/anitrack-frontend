@@ -32,6 +32,8 @@ export const en = {
     next: 'Next',
     /** Primer string con interpolación: se declara como función tipada. */
     pageOf: (page: number, totalPages: number) => `Page ${page} of ${totalPages}`,
+    readMore: 'Read more',
+    readLess: 'Read less',
   },
   home: {
     heroTitle: 'Track everything you watch and play',
@@ -49,6 +51,10 @@ export const en = {
     errorBody: "We couldn't load this content.",
     notFoundTitle: 'Page not found',
     notFoundBody: "The page you're looking for doesn't exist.",
+    franchiseNotFoundTitle: 'Franchise not found',
+    franchiseNotFoundBody: "This franchise doesn't exist or was removed.",
+    contentNotFoundTitle: 'Content not found',
+    contentNotFoundBody: "This content doesn't exist or was removed.",
   },
   card: {
     inYourList: 'In your list',
@@ -80,6 +86,40 @@ export const en = {
   placeholder: {
     comingSoon: 'Coming soon',
     sprint: 'This screen is planned for a later sprint.',
+  },
+  detail: {
+    alsoKnownAs: 'Also known as',
+    versionsTableLabel: 'Versions',
+    noVersionsTitle: 'No versions listed',
+    noVersionsBody: 'This content has no versions yet.',
+    version: {
+      name: 'Name',
+      episodes: 'Episodes',
+      episodesUnknown: 'Unknown',
+      episodesCount: (n: number) => `${n} episode${n === 1 ? '' : 's'}`,
+      releaseDate: 'Release date',
+      country: 'Country',
+      platform: 'Platform',
+      dubbingStudio: 'Dub studio',
+    },
+    gallery: {
+      show: (count: number) => `Show gallery (${count})`,
+      hide: 'Hide gallery',
+    },
+  },
+  search: {
+    inputLabel: 'Search franchises and titles',
+    placeholder: 'Search…',
+    clear: 'Clear search',
+    aliasFor: (mainName: string) => `Matches "${mainName}"`,
+    loading: 'Searching…',
+    noMatches: 'No matches found',
+    seeAllResults: (q: string) => `See all results for "${q}"`,
+    resultsFor: (q: string) => `Results for "${q}"`,
+    promptTitle: 'Search the catalog',
+    promptBody: 'Type at least 2 characters in the search bar to find franchises and titles.',
+    noResultsTitle: 'No results',
+    noResultsBody: (q: string) => `We couldn't find anything for "${q}".`,
   },
 } as const
 
