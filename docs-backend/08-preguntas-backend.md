@@ -652,6 +652,21 @@ lectura de código) dos de los hallazgos anteriores y sumar dos datos nuevos:
       → Respuesta: **[BLOQUEADA]** El volumen esperado lo sabés vos/producto. Sin
       el dato asumo "miles" y diseño paginado; si fueran decenas de miles habría
       que revisar índices (backend).
+    - 12.4. **(Agregado 2026-08-31, al implementar la tarea 2.6 — SearchBar)**
+      `SearchHit` (doc 04) da `franchiseId` para un hit `kind: "content"`,
+      pero no el nombre de esa franquicia. El frontend arma URLs con slug
+      (`/franchise/:id-:slug/...`) y sin ese nombre no puede armar el slug
+      del segmento de franquicia; hoy navega con el id pelado
+      (`/franchise/9/content/111-...`), que funciona pero es menos prolijo.
+      → Respuesta: **[FE→BE]** Requisito: cuando exista la API real, que
+      `GET /search` agregue `franchiseName: string` a los hits de tipo
+      `content` (o, alternativamente, que el propio `id`/`name` del hit ya
+      alcance para reconstruir el slug — a definir con el contrato final).
+      Mientras tanto no bloquea: el mock y el spike de 2.8 no cubren este
+      caso porque el controlador REST propio (rama `anitrack/rest-catalog-api`)
+      tampoco lo agregó; queda anotado en
+      [`../docs/04-contrato-api.md`](../docs/04-contrato-api.md) para no
+      perderlo.
 
 ## Proceso
 

@@ -58,9 +58,12 @@ mientras `me` está en vuelo muestra skeleton de página, si 401 redirige a
 
 ### Detalle de franquicia `/franchise/:id`
 - Header: banner/poster, nombre principal + alternativos (tooltip/expandible),
-  géneros (badges), descripción expandible ("read more").
-- Tabs: **Videos** / **Games** (ocultar tab vacía; si ambas, default la que
-  tenga contenido).
+  géneros (badges, derivados client-side de los `Content.genres` de la
+  franquicia — el contrato no trae géneros a nivel franquicia), descripción
+  expandible ("read more", componente `ExpandableText`).
+- Tabs: **Videos** / **Games**. Si la franquicia tiene un solo tipo, la tab se
+  oculta por completo (no hay selector). Si tiene ambos, el default es
+  siempre **Videos** — dominio video-primero, ver ADR-012.
 - Lista de `ContentSection`: cada content con su imagen, videoType badge,
   descripción corta y su **tabla/cards de versiones** (nombre, episodios,
   fecha, país con banderita, plataforma, estudio de doblaje).
@@ -131,7 +134,8 @@ Componentes propios (sobre shadcn):
 | `RatingStars` | igual | Tras feature flag (ADR-004); input 1–10 con medias estrellas visuales |
 | `ScoreDisplay` | igual | Solo bajo flag |
 | `GenreBadge` | — | Paleta indexada 1–11 (mapea `colorIndex` de Odoo) |
-| `SearchBar` | igual | Debounce + dropdown + navegación teclado |
+| `SearchBar` | igual | Debounce + dropdown + navegación teclado; combobox ARIA APG hecho a mano, sin `cmdk`/`Popover` — ADR-013 |
+| `SearchResultsDropdown` | — (nuevo) | `listbox` de `SearchBar`; "see all results" siempre visible (loading y 0 resultados incluidos) |
 | `FilterBar` | igual | Chips + selects, estado en URL |
 | `UserAvatar` | igual | Imagen o iniciales |
 | `LoadingSkeleton` | igual | Variantes: card-grid, detail-header, list-rows, tree |
@@ -139,6 +143,8 @@ Componentes propios (sobre shadcn):
 | `ErrorBoundary` + `ErrorState` | igual | Boundary por página + estado de error de query con retry |
 | `ChecklistTree` | — (nuevo, core) | Árbol accesible (roles treeview, teclado) |
 | `CountryFlag` | — | Imagen de country con tooltip |
+| `ExpandableText` | — | Descripción colapsable ("Read more/less"); mide overflow real (`scrollHeight`/`clientHeight`), no un umbral de caracteres |
+| `FranchiseGallery` | — (nuevo) | Bloque colapsable de imágenes en el detalle de franquicia; estado propio (no `Collapsible` de Radix, mismo criterio que `ExpandableText`), lazy real: las `<img>` no se montan mientras está colapsada |
 
 ## Reglas transversales (del brief, confirmadas)
 

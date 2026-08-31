@@ -49,15 +49,20 @@
 **Objetivo demo:** explorar el catálogo de punta a punta (grid → franquicia →
 contenido → versiones), buscar, filtrar. Todo con MSW.
 
+> ✅ **Sprint 2 completo** (2026-08-31): las 8 tareas (2.1–2.8) cerradas,
+> objetivo demo cumplido — cierre en
+> [10-sprint2-avance.md](./10-sprint2-avance.md) (sección "Actualización
+> 2026-08-31 — Tareas 2.6 y 2.7 + Cierre de Sprint 2").
+
 | # | Tarea | Detalle | CA | Estado |
 |---|---|---|---|---|
 | 2.1 | `catalog.service` + hooks | `useFranchiseList(filters)`, `useFranchiseDetail(id)`, `useSearch(q)` | Tests con MSW | ✅ (cerrada ya en Sprint 1) + `useGenres`/`usePlatforms` |
 | 2.2 | FilterBar + estado en URL | hook `useCatalogFilters()` sobre searchParams | Refresh conserva filtros; back/forward OK | ✅ hook + `FilterBar` (chips, multi-select géneros/plataformas, rango de años, sort) + 17 tests |
 | 2.3 | Página catálogo | Grid + paginación + skeleton + empty | Los 4 estados (loading/data/empty/error) demostrables | ✅ `CatalogPage` con grid, `PaginationControls` y los 4 estados + 10 tests |
-| 2.4 | Detalle franquicia | Header, tabs V/G, ContentSection, tabla de versiones | Con seed multi-versión y episodios desconocidos | ⬜ |
-| 2.5 | Detalle contenido | Ruta propia/modal-route | Deep-link directo funciona | ⬜ |
-| 2.6 | SearchBar global | Debounce + dropdown + teclado + página resultados | Test de debounce e interacción | ⬜ |
-| 2.7 | Galería de imágenes | Colapsable, lazy | — | ⬜ |
+| 2.4 | Detalle franquicia | Header, tabs V/G, ContentSection, tabla de versiones | Con seed multi-versión y episodios desconocidos | ✅ header con géneros derivados client-side, tabs (default "Videos" si ambas — ver ADR-012) y `VersionsTable`; `AddToListButton` y galería quedan fuera a propósito (corazón de Sprint 3 y tarea 2.7) — detalle en [10-sprint2-avance.md](./10-sprint2-avance.md) |
+| 2.5 | Detalle contenido | Ruta propia/modal-route | Deep-link directo funciona | ✅ ruta propia (no modal-route) reutilizando `ContentSection` sin auto-enlace; deep-link directo probado — detalle en [10-sprint2-avance.md](./10-sprint2-avance.md) |
+| 2.6 | SearchBar global | Debounce + dropdown + teclado + página resultados | Test de debounce e interacción | ✅ combobox accesible (patrón ARIA APG, hecho a mano — ver ADR-013) + `/search` reutilizando grid y filtros del catálogo. Brecha conocida: el buscador mobile no es colapsable inline, sigue navegando a `/search` como en Sprint 1 — detalle en [10-sprint2-avance.md](./10-sprint2-avance.md) |
+| 2.7 | Galería de imágenes | Colapsable, lazy | — | ✅ bloque colapsable en `FranchiseDetailPage` sobre `franchise.gallery` (ya llegaba del contrato, no se usaba); lazy real: las `<img>` no se montan mientras está colapsada — detalle en [10-sprint2-avance.md](./10-sprint2-avance.md) |
 | 2.8 | ⚠️ Spike integración real | Probar 1 endpoint real (franchises) vía proxy de Vite contra el **Odoo local** (`docker compose --profile backend up`) | Decisión documentada: adaptador necesario sí/no | ✅ **No hace falta adaptador**: se escribió un controlador REST propio en `ll-odoo` (rama `anitrack/rest-catalog-api`, sin commitear/pushear) que emite directo el contrato del doc 04; 7/7 respuestas reales validadas contra los esquemas Zod del frontend. Matiz: la traducción no desapareció, se movió a Python del lado del backend — detalle completo en [11-spike-integracion-real.md](./11-spike-integracion-real.md) |
 
 **Conceptos:** searchParams como estado; `keepPreviousData`/`placeholderData`

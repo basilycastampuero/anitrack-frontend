@@ -62,8 +62,8 @@ tiene las preguntas listas para enviar. Mientras tanto, MSW permite construir el
 - [x] **Sprint 1 del frontend completado** — ver [09-sprint1-completado.md](./09-sprint1-completado.md)
 - [ ] Conversación con Chano (usar [`../docs-backend/08-preguntas-backend.md`](../docs-backend/08-preguntas-backend.md)) — en curso: respondió hosting, faltan las demás secciones
 - [x] Repo remoto del frontend creado y pusheado en GitHub (`basilycastampuero/anitrack-frontend`, cuenta principal — Fase 0.3, ver [10-sprint2-avance.md](./10-sprint2-avance.md))
-- [ ] Sprint 2 — catálogo completo — en curso, ver [10-sprint2-avance.md](./10-sprint2-avance.md) y [11-spike-integracion-real.md](./11-spike-integracion-real.md) (tarea 2.8 cerrada: no hace falta adaptador). Camino crítico: 2.4 (detalle franquicia), 2.5 (detalle contenido), 2.6 (SearchBar global), 2.7 (galería de imágenes)
-- [ ] Sprint 3a — auth + estructura de listas
+- [x] **Sprint 2 completado** — catálogo de punta a punta (grid → franquicia → contenido → versiones), búsqueda y filtros, objetivo demo cumplido. Las 8 tareas (2.1–2.8) ✅ — ver [10-sprint2-avance.md](./10-sprint2-avance.md) (bitácora completa, cierre en la sección "Actualización 2026-08-31 — Tareas 2.6 y 2.7 + Cierre de Sprint 2") y [11-spike-integracion-real.md](./11-spike-integracion-real.md) (spike 2.8: no hace falta adaptador)
+- [ ] Sprint 3a — auth + estructura de listas (camino crítico actual)
 - [ ] Sprint 3b — tracking y vinculación
 - [ ] Sprint 4 — integración, pulido y deploy
 

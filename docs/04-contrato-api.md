@@ -172,6 +172,16 @@ interface SearchHit {
 }
 ```
 
+> **Hueco detectado en implementación (2026-08-31, tarea 2.6).**
+> `SearchHit` da `franchiseId` para navegar, pero no el nombre de la
+> franquicia. Para un hit `kind: "content"`, la URL con slug
+> (`/franchise/:id-:slug/content/:id-:slug`, ver `slug.ts`) necesita ese
+> nombre y no lo tiene: el frontend arma la ruta sin slug en el segmento de
+> franquicia (`/franchise/9/content/111-steins-gate-vn`). No rompe el
+> routing (solo se parsea el id inicial de cada segmento) pero la URL queda
+> menos prolija. Pendiente `[FE→BE]`, ver pregunta 12.4 en
+> [`../docs-backend/08-preguntas-backend.md`](../docs-backend/08-preguntas-backend.md).
+
 ---
 
 ## Mis listas (auth requerida)

@@ -286,3 +286,72 @@ estado HTTP reales (404, 422, etc.) y un sobre de error propio
 adaptador para traducir el sobre JSON-RPC. Negativa: hay que armar a mano lo
 que `type="json"` da gratis (serialización, manejo de excepciones a JSON) —
 costo aceptado una sola vez en el controlador.
+
+---
+
+## ADR-012 — Tabs Videos/Games del detalle de franquicia: default fijo "Videos" cuando ambas tienen contenido
+
+**Contexto.** El doc 06 pedía "si ambas [tabs] tienen contenido, default la
+que tenga contenido" — frase que no resuelve el caso real (una franquicia con
+anime Y juegos, ambos con contenido, ej. tipo "Pokémon"). Surgió al
+implementar la tarea 2.4 (detalle de franquicia).
+
+**Alternativas consideradas.**
+1. Default dinámico según qué tipo tiene más contenido/versiones. Descartada:
+   métrica arbitraria y resultado impredecible para el usuario — una
+   franquicia con 1 anime y 5 juegos abriría en "Games" sin que eso sea
+   obvio ni comunicado.
+2. Recordar la última tab vista por franquicia (estado persistido). Descartada
+   por complejidad no justificada para el alcance de la tarea 2.4; queda como
+   posible mejora futura si hay señal real de que hace falta.
+3. **[Elegida]** Default fijo **"Videos"** siempre que ambos tipos tengan
+   contenido. AniTrack es un dominio video-primero (anime/series es el caso
+   de uso principal del brief; juegos es soporte secundario del modelo de
+   franquicia real del backend).
+
+**Decisión.** Si la franquicia tiene un solo tipo de contenido, la tab se
+oculta por completo (no hay selector). Si tiene ambos, `Tabs` monta con
+`defaultValue="video"` siempre.
+
+**Consecuencias.** Positiva: comportamiento consistente y predecible, sin
+estado adicional que persistir ni heurística ambigua. Negativa: en una
+franquicia donde lo relevante para el usuario sea mayormente juegos, cuesta
+un clic extra llegar a esa tab — no hay evidencia hoy de que esto sea un
+problema real, dado que el seed y el dominio actual siguen siendo
+video-primero.
+
+---
+
+## ADR-013 — `SearchBar` (combobox de autocompletado) escrito a mano siguiendo ARIA APG, sin sumar dependencia
+
+**Contexto.** La tarea 2.6 pide un combobox de autocompletado contra el
+backend (`GET /search`): input + dropdown de resultados navegable por
+teclado, con `aria-activedescendant`. Radix (ya instalado, base de shadcn/ui)
+no tiene un primitivo para este caso: su `Select` es para listas cerradas
+conocidas de antemano, no para opciones que llegan async mientras el usuario
+tipea. El proyecto tampoco tiene `cmdk` (lo que usa shadcn para su patrón
+"Command"/`Popover` de búsqueda) instalado.
+
+**Alternativas consideradas.**
+1. Sumar `cmdk` + `Popover` de shadcn (patrón "Command palette") y adaptarlo
+   a autocompletado remoto. Descartada: es una dependencia nueva completa
+   para un único componente, cuando el proyecto ya tiene precedente de
+   resolver interacción a mano en vez de sumar un primitivo de Radix cuando
+   eso evita complejidad de testing (`ExpandableText`, tarea 2.4).
+2. **[Elegida]** Implementar el combobox a mano siguiendo el patrón
+   [ARIA APG Combobox](https://www.w3.org/WAI/ARIA/apg/patterns/combobox/):
+   `role="combobox"` en el input + `role="listbox"`/`role="option"` en el
+   dropdown + `aria-activedescendant` sincronizado con la navegación por
+   flechas, sin ninguna librería nueva.
+
+**Decisión.** `SearchBar` + `SearchResultsDropdown`
+(`src/features/catalog/components/`) implementan el patrón ARIA a mano,
+sobre `useSearchBar` (debounce 300ms vía `useDebouncedValue`) y
+`useSearch(q)` (ya existente desde Sprint 1).
+
+**Consecuencias.** Positiva: cero dependencias nuevas; el componente queda
+100% bajo control del proyecto para casos de test y accesibilidad. Negativa:
+responsabilidad propia de mantener el manejo de teclado (flechas, Enter,
+Escape, `aria-activedescendant`) correcto — un primitivo de terceros
+absorbería ese mantenimiento. Aceptado porque el alcance es un único
+componente, no un patrón que se repita varias veces en la app.
