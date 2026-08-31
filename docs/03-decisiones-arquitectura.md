@@ -164,6 +164,13 @@ Placeholder propio para `null`. `loading="lazy"` + `aspect-ratio` fijo en cards.
 frontend no cambia. Pendiente confirmar que `/web/image` sea accesible con
 `auth="public"` para catálogo publicado (doc 08, pregunta 7).
 
+> **Actualización (2026-08-30):** confirmado que `/web/image` **no** es
+> accesible sin sesión (deniega por ACL) y, peor, degrada en silencio a un
+> placeholder gris de Odoo en vez de dar 403 (doc 08, pregunta 7). Se resolvió
+> con la ruta propia `/api/v1/images/<id>` del controlador de ADR-010, que sí
+> sirve el binario real sin sesión, con `Cache-Control`/`ETag`. Ver detalle en
+> [11-spike-integracion-real.md](./11-spike-integracion-real.md).
+
 ---
 
 ## ADR-007 — Idioma: UI en inglés, código y docs según audiencia
@@ -212,3 +219,70 @@ integración.
 `search` se integra dentro de `catalog` (comparten servicio y tipos; una
 feature separada duplicaría). Reglas intactas: pages solo ensamblan; components
 → hooks → services → API; sin `any`; sin fetching en `useEffect`.
+
+---
+
+## ADR-010 — El controlador REST del catálogo lee con `sudo()` y filtra por `published`, en vez de abrir las ACL de los modelos
+
+**Contexto.** Verificado en doc 08 (pregunta 7) que **ningún** modelo de
+`ll_checklist` tiene ACL para usuario público o portal: todo está atado al
+grupo `LL Checklist / Administrator` (`ll-odoo/odoo-modules/ll_checklist/security/administrator.xml`).
+El catálogo, sin embargo, tiene que verse deslogueado. Abrir las ACL de
+lectura del modelo al grupo público resolvería el catálogo, pero esos mismos
+modelos conviven con `ll.checklist.checklist` y `ll.checklist.link` (listas y
+progreso privados del usuario) en el mismo módulo de seguridad — el riesgo de
+exponer de más por una regla ACL mal acotada es real y difícil de auditar con
+el tiempo.
+
+**Alternativas consideradas.**
+1. Reglas `ir.model.access` de solo lectura para un grupo público/portal
+   nuevo, acotadas a los modelos de catálogo. Descartada: multiplica
+   superficie de configuración de seguridad (un registro XML por modelo,
+   fácil de romper en un futuro modelo nuevo) y sigue sin filtrar por
+   `published` a nivel de fila (ACL es por modelo, no por registro).
+2. **[Elegida]** El controlador (`auth="public"`) lee con `sudo()` (bypassa
+   ACL) pero filtra él mismo: solo devuelve registros con
+   `franchise_published/content_published/version_published = True`, y nunca
+   toca `ll.checklist.checklist` ni `ll.checklist.link`. La responsabilidad de
+   no filtrar datos privados queda centralizada en un único archivo Python
+   (`odoo-modules/ll_webpage/controllers/api_catalog.py`) fácil de auditar.
+
+**Decisión.** Opción 2. El `sudo()` es explícito y acotado a las rutas de
+catálogo; ninguna ruta del controlador toca modelos de listas/links de
+usuario.
+
+**Consecuencias.** Positiva: no se tocan las ACL existentes ni el grupo
+`Administrator`, cero riesgo de regresión sobre lo que ya funciona en el
+backoffice. Negativa: la seguridad del catálogo público depende de que cada
+endpoint nuevo del controlador recuerde filtrar por `published` — no hay una
+red de seguridad a nivel de ACL que lo haga por él. Mitigación: el filtro se
+concentra en un helper común dentro del mismo archivo, no se repite ad-hoc por
+ruta.
+
+---
+
+## ADR-011 — Controlador de catálogo con `type="http"`, no `type="json"`
+
+**Contexto.** Odoo permite declarar rutas `http.route` con `type="json"` o
+`type="http"`. El contrato del doc 04 (congelado, ADR-001) define códigos de
+estado HTTP reales (404, 422, etc.) y un sobre de error propio
+`{"error": {"code", "message"}}` para que el interceptor único de Axios
+(`src/lib/http.ts`) ramifique por código.
+
+**Alternativas consideradas.**
+1. `type="json"`: es el default más común en controladores Odoo internos,
+   pero **siempre** responde HTTP 200 y envuelve la respuesta (o el error) en
+   el sobre JSON-RPC de Odoo — el status HTTP deja de ser información útil y
+   el interceptor de Axios tendría que inspeccionar el cuerpo para saber si
+   hubo error, contradiciendo el contrato ya firmado en doc 04.
+2. **[Elegida]** `type="http"`: el controlador arma la respuesta JSON a mano
+   (`request.make_response` / `werkzeug.Response`) con el status code y el
+   cuerpo exactos del contrato.
+
+**Decisión.** Todas las rutas de `/api/v1` (`api_catalog.py`) son
+`type="http"`.
+
+**Consecuencias.** Positiva: contrato cumplido al pie de la letra, sin
+adaptador para traducir el sobre JSON-RPC. Negativa: hay que armar a mano lo
+que `type="json"` da gratis (serialización, manejo de excepciones a JSON) —
+costo aceptado una sola vez en el controlador.

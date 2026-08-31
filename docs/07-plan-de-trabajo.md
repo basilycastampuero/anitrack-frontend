@@ -52,13 +52,13 @@ contenido → versiones), buscar, filtrar. Todo con MSW.
 | # | Tarea | Detalle | CA | Estado |
 |---|---|---|---|---|
 | 2.1 | `catalog.service` + hooks | `useFranchiseList(filters)`, `useFranchiseDetail(id)`, `useSearch(q)` | Tests con MSW | ✅ (cerrada ya en Sprint 1) + `useGenres`/`usePlatforms` |
-| 2.2 | FilterBar + estado en URL | hook `useCatalogFilters()` sobre searchParams | Refresh conserva filtros; back/forward OK | 🟡 hook + 5 tests hechos; falta el componente `FilterBar` |
-| 2.3 | Página catálogo | Grid + paginación + skeleton + empty | Los 4 estados (loading/data/empty/error) demostrables | ⬜ **camino crítico** — `CatalogPage` sigue siendo placeholder |
+| 2.2 | FilterBar + estado en URL | hook `useCatalogFilters()` sobre searchParams | Refresh conserva filtros; back/forward OK | ✅ hook + `FilterBar` (chips, multi-select géneros/plataformas, rango de años, sort) + 17 tests |
+| 2.3 | Página catálogo | Grid + paginación + skeleton + empty | Los 4 estados (loading/data/empty/error) demostrables | ✅ `CatalogPage` con grid, `PaginationControls` y los 4 estados + 10 tests |
 | 2.4 | Detalle franquicia | Header, tabs V/G, ContentSection, tabla de versiones | Con seed multi-versión y episodios desconocidos | ⬜ |
 | 2.5 | Detalle contenido | Ruta propia/modal-route | Deep-link directo funciona | ⬜ |
 | 2.6 | SearchBar global | Debounce + dropdown + teclado + página resultados | Test de debounce e interacción | ⬜ |
 | 2.7 | Galería de imágenes | Colapsable, lazy | — | ⬜ |
-| 2.8 | ⚠️ Spike integración real | Probar 1 endpoint real (franchises) vía proxy de Vite contra el **Odoo local** (`docker compose --profile backend up`) | Decisión documentada: adaptador necesario sí/no | ⬜ ya no depende de Chano — el entorno local existe (doc 09), falta ejecutarlo |
+| 2.8 | ⚠️ Spike integración real | Probar 1 endpoint real (franchises) vía proxy de Vite contra el **Odoo local** (`docker compose --profile backend up`) | Decisión documentada: adaptador necesario sí/no | ✅ **No hace falta adaptador**: se escribió un controlador REST propio en `ll-odoo` (rama `anitrack/rest-catalog-api`, sin commitear/pushear) que emite directo el contrato del doc 04; 7/7 respuestas reales validadas contra los esquemas Zod del frontend. Matiz: la traducción no desapareció, se movió a Python del lado del backend — detalle completo en [11-spike-integracion-real.md](./11-spike-integracion-real.md) |
 
 **Conceptos:** searchParams como estado; `keepPreviousData`/`placeholderData`
 para paginación sin parpadeo; prefetch on-hover de cards.

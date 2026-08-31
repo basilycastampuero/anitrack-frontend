@@ -19,6 +19,7 @@
 | [07-plan-de-trabajo.md](./07-plan-de-trabajo.md) | Plan detallado por fases/sprints con tareas y criterios de aceptación |
 | [09-sprint1-completado.md](./09-sprint1-completado.md) | Bitácora: qué se construyó en el setup/Sprint 1, decisiones tomadas sobre la marcha y verificación |
 | [10-sprint2-avance.md](./10-sprint2-avance.md) | Bitácora: avance del Sprint 2 (catálogo) en curso — estado real por tarea, decisiones sobre la marcha y verificación |
+| [11-spike-integracion-real.md](./11-spike-integracion-real.md) | Bitácora: spike de integración real (tarea 2.8) — seed del catálogo contra Odoo local, controlador REST propio en `ll-odoo` (sin pushear) y decisión "no hace falta adaptador" |
 | [anitrack_ai_context.md](./anitrack_ai_context.md) | Brief original del proyecto (visión tipo MyAnimeList). Referencia histórica: el backend real NO implementa este modelo tal cual — ver el gap en [`../docs-backend/02-analisis-backend-odoo.md`](../docs-backend/02-analisis-backend-odoo.md) |
 
 Los números de archivo (01, 03...) se conservan de la numeración original de
@@ -61,7 +62,7 @@ tiene las preguntas listas para enviar. Mientras tanto, MSW permite construir el
 - [x] **Sprint 1 del frontend completado** — ver [09-sprint1-completado.md](./09-sprint1-completado.md)
 - [ ] Conversación con Chano (usar [`../docs-backend/08-preguntas-backend.md`](../docs-backend/08-preguntas-backend.md)) — en curso: respondió hosting, faltan las demás secciones
 - [x] Repo remoto del frontend creado y pusheado en GitHub (`basilycastampuero/anitrack-frontend`, cuenta principal — Fase 0.3, ver [10-sprint2-avance.md](./10-sprint2-avance.md))
-- [ ] Sprint 2 — catálogo completo — en curso, ver [10-sprint2-avance.md](./10-sprint2-avance.md). Camino crítico: tarea 2.3 (página de catálogo real) + el componente `FilterBar` que le falta a 2.2
+- [ ] Sprint 2 — catálogo completo — en curso, ver [10-sprint2-avance.md](./10-sprint2-avance.md) y [11-spike-integracion-real.md](./11-spike-integracion-real.md) (tarea 2.8 cerrada: no hace falta adaptador). Camino crítico: 2.4 (detalle franquicia), 2.5 (detalle contenido), 2.6 (SearchBar global), 2.7 (galería de imágenes)
 - [ ] Sprint 3a — auth + estructura de listas
 - [ ] Sprint 3b — tracking y vinculación
 - [ ] Sprint 4 — integración, pulido y deploy

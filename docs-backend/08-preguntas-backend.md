@@ -18,11 +18,106 @@ lo que sigue dependiendo genuinamente del backend". Leyenda de los marcadores:
   la API**. Mientras tanto no bloquea: construyo contra MSW.
 - **[BLOQUEADA]** — no la puedo responder yo; depende de un dato o una decisión
   que solo tiene el backend/Chano. Explico por qué y qué asumo mientras tanto.
+- **[VERIFICADO 2026-08-27]** — lo que en la ronda anterior estaba
+  `[BLOQUEADA]` se resolvió **leyendo el código real** de `ll-odoo` (rama
+  `checklist_base`, commit `9ba6b0e`) o probándolo contra el Odoo local de
+  Docker, sin necesidad de preguntarle a Chano. Cito archivo:línea. No borro
+  la respuesta anterior: la dejo arriba, para que se vea qué se asumía antes
+  de poder verificarlo.
 
 > Contexto que enmarca todo: hoy `ll-odoo` **no tiene API HTTP** (`ll_webpage`
 > está vacío). Que Chano delegue el frontend sugiere que la API real no llega
 > pronto. Por eso muchas respuestas son "así lo asumo en el mock y en el
 > adaptador; esto es lo que necesitaré el día que la API exista".
+
+## Ronda de verificación contra el código del backend (2026-08-27)
+
+Varias preguntas quedaron `[BLOQUEADA]` en la ronda anterior porque en ese
+momento no se había leído el código fuente de `ll-odoo` a fondo para
+responderlas — se asumió que hacía falta preguntarle a Chano. Al retomar el
+trabajo, se aplicó un criterio distinto: **antes de preguntarle algo a Chano,
+agotar lo que se puede verificar leyendo el código de `ll-odoo/` (rama
+`checklist_base`, commit `9ba6b0e`, sin cambios desde el análisis original del
+doc 02) y probando contra el Odoo local levantado con Docker**. Solo se le
+pregunta a Chano lo que genuinamente no se puede observar de ninguna de esas
+dos formas (config de infraestructura, credenciales, decisiones de producto
+que no dejan rastro en el código).
+
+Con ese criterio se revisaron todas las preguntas `[BLOQUEADA]`. El resultado:
+
+- **2.2** (¿`compute_show_name` es `store=True`?) → se podía leer directo en
+  el modelo. **Resuelta**, ya no es pregunta.
+- **7** (¿`/web/image` es público para contenido `published`?) → se podía
+  leer directo en las reglas de acceso (`ir.model.access`) y en los grupos
+  definidos. **Resuelta, y con un alcance más grave que la pregunta
+  original**: no es solo la imagen, es *todo* el catálogo. Pasa a ser un
+  requisito `[FE→BE]` concreto, no una pregunta abierta.
+- **1** y **5.3** (transporte REST/JSON-RPC y CSRF) → no se podían verificar
+  leyendo código (son decisiones a tomar, no hechos a observar), pero sí se
+  pudo verificar un hecho relevante que cambia el planteo: **no existe
+  ninguna API HTTP propia hoy**, ni siquiera embrionaria. El plan deja de ser
+  "preguntarle a Chano qué prefiere" y pasa a ser "escribir el controlador y
+  mandárselo como PR concreto para que lo revise" (ver detalle en la pregunta
+  1).
+- **6** y **6.1** (OAuth Twitch) → se pudo verificar que el módulo `ll_oauth`
+  no trae ningún proveedor de Twitch precargado en el código (se configura a
+  mano en el admin de Odoo, con datos que viven solo en la base de esa
+  instalación) — por lo tanto **no bloquea seguir construyendo**: se puede
+  armar y probar el flujo completo con una app de Twitch de prueba propia
+  contra el Odoo local. Sigue habiendo una parte de esta pregunta que de
+  verdad depende de Chano (su app de producción), pero deja de frenar el
+  desarrollo.
+- El resto de las `[BLOQUEADA]` (dominio/DNS, `session_expiration`,
+  multi-sesión, volumen del catálogo, nombres alternativos en la búsqueda,
+  franquicias ya cargadas) se revisaron y **siguen siendo genuinamente
+  bloqueadas**: son config de infraestructura, decisiones de producto o datos
+  operativos que no dejan ningún rastro en el código fuente. No se tocaron.
+
+Con esto, de las preguntas que quedaban `[BLOQUEADA]` en la ronda anterior,
+**4 se resolvieron o dejaron de bloquear el desarrollo** (2.2, 7, 6, 6.1) y
+**2 cambiaron de planteo sin resolverse** (1, 5.3, que ahora dependen de un PR
+propio más que de una respuesta de Chano). El resto sigue abierto tal cual.
+
+### Actualización (2026-08-27) — verificación empírica contra el Odoo local
+
+Lo de arriba se verificó leyendo código. Después, se levantó el Odoo local
+(`docker compose --profile backend up -d odoo db`; Odoo en `localhost:8069`,
+DB `anitrack` en el contenedor `chambachambure-db-1`) y se consultó la base
+viva por `psql`, lo que permitió **confirmar empíricamente** (no solo por
+lectura de código) dos de los hallazgos anteriores y sumar dos datos nuevos:
+
+- **OAuth Twitch (pregunta 6)**: la tabla `auth_oauth_provider` solo tiene los
+  3 proveedores de fábrica de Odoo (`Odoo.com Accounts`, `Facebook Graph`,
+  `Google OAuth2`) y ninguno es Twitch; `/web/login` solo renderiza el botón
+  de Odoo.com. Esto **cierra la nota sin verificar** que había quedado sobre
+  el recuerdo del usuario de haber visto andar el auth de Twitch — ver el
+  detalle completo y la hipótesis (no confirmada) de a qué se debe ese
+  recuerdo en la pregunta 6, más abajo.
+- **ACL del catálogo (pregunta 7)**: la misma restricción que se leyó en
+  `administrator.xml` (16 modelos, todos atados solo a
+  `LL Checklist / Administrator`) se confirmó con una query contra
+  `ir_model_access`/`ir_model`/`res_groups` en la base viva. Detalle completo
+  en la pregunta 7, más abajo.
+- **Estado de los datos del entorno local (dato nuevo, relevante para el
+  spike 2.8 del plan de trabajo)**: conteos reales en la base —
+  `ll_checklist_franchise`, `ll_checklist_content`, `ll_checklist_version` y
+  `ll_checklist_link` están en **0** filas; `ll_checklist_checklist` tiene
+  **7** y `ll_checklist_user` tiene **1** (el perfil del usuario, de una
+  sesión anterior). Es decir: hay usuario y checklists, pero **cero datos de
+  catálogo**. Para el spike de integración real (tarea 2.8 de
+  `docs/07-plan-de-trabajo.md`: probar el endpoint de franchises contra este
+  mismo Odoo local) hace falta cargar manualmente al menos una franquicia con
+  su contenido y versión — si no, el endpoint devolvería una lista vacía y no
+  probaría nada. Esto también responde, parcialmente, la pregunta 9.1
+  (¿el catálogo está cargado/curado?) pero **solo para este entorno local**:
+  acá no hay nada cargado; cómo está la instancia de producción de Chano
+  sigue sin saberse — ver nota cruzada en 9.1 y 14.1, más abajo.
+- **Nota operativa sobre el usuario `admin`**: se verificó por query contra
+  `res_groups_users_rel` que el usuario `admin` de este Odoo local **conserva**
+  el grupo `LL Checklist / Administrator` — el menú "LL Checklist" ya es
+  visible y **no hace falta repetir** el fix manual que documenta
+  `docs/09-sprint1-completado.md`. Si algún día se recrea la base de datos
+  desde cero (el volumen `odoo_db_data`), sí habría que repetirlo.
 
 ## Transporte y API
 
@@ -42,6 +137,40 @@ lo que sigue dependiendo genuinamente del backend". Leyenda de los marcadores:
    *Nota: si elegís (b), del lado frontend lo adapto, pero necesito igualmente
    endpoints públicos para catálogo sin sesión, y expones modelos internos
    (nombres de campos, ACLs por modelo) — (a) da una superficie más controlada.*
+
+   → **[VERIFICADO 2026-08-27]** Se verificó que hoy no existe ninguna
+   respuesta posible de Chano a esta pregunta porque **no hay ninguna API HTTP
+   propia para elegir entre (a)/(b)/(c)**: `ll-odoo/odoo-modules/ll_webpage/controllers/index.py`
+   tiene todo su contenido comentado (cero rutas activas), y el único
+   controlador real del proyecto es
+   `ll-odoo/odoo-modules/ll_oauth/controllers/auth_main.py`, que solo extiende
+   `OAuthLogin.list_providers()` de `auth_oauth` para agregar parámetros extra
+   al link de auth — no expone datos. Cambia el planteo: en vez de preguntarle
+   a Chano en abstracto, el frontend **escribe el controlador REST él mismo**
+   (`/api/v1/...`, lecturas de catálogo públicas con `sudo()` acotado, ver
+   pregunta 7) en una rama propia de `ll-odoo` y se lo manda como **PR
+   concreto para que lo revise** — más fácil revisar código real que decidir
+   sin nada construido. Respeta la disciplina del proyecto: rama propia + PR,
+   nunca push directo a `checklist_base`/`master`.
+
+   → **[VERIFICADO 2026-08-30 — controlador escrito y probado]** Se escribió
+   el controlador descrito arriba: rama `anitrack/rest-catalog-api` de
+   `ll-odoo` (creada desde `checklist_base`), archivo nuevo
+   `odoo-modules/ll_webpage/controllers/api_catalog.py` (~535 líneas, 3
+   archivos de diff en total con `controllers/__init__.py` y
+   `__manifest__.py`). Rutas bajo `/api/v1`: `/genres`, `/platforms`,
+   `/companies`, `/franchises` (con filtros/paginación/orden),
+   `/franchises/<id>`, `/contents/<id>`, `/search`, `/images/<id>`,
+   `/platforms/<id>/image`, `/countries/<id>/image` — todas GET, todas
+   `auth="public"` (ver ADR-010 y ADR-011 en `docs/03-decisiones-arquitectura.md`
+   para el porqué de `sudo()`+filtro `published` y de `type="http"`). **Nada**
+   de sesión ni de listas del usuario (eso es Sprint 3). Se validó con un test
+   temporal (ya borrado) que las 7 respuestas reales del Odoo local pasan los
+   esquemas Zod del frontend sin traducción — la tarea 2.8 del plan queda
+   cerrada con esto (detalle completo en `docs/11-spike-integracion-real.md`).
+   **Todavía sin commitear ni pushear**: queda para revisión del dueño del
+   proyecto y, eventualmente, como PR real a Chano — el "PR concreto" que
+   proponía la respuesta anterior ya existe como código, solo falta enviarlo.
 
    - 1.1. ¿Versionamos la URL desde el día 1 (`/api/v1/...`)? Así un cambio de
      contrato futuro no rompe clientes viejos sin coordinar.
@@ -89,6 +218,13 @@ lo que sigue dependiendo genuinamente del backend". Leyenda de los marcadores:
      está `store`, un catálogo grande paga cómputo por request y quizá deba pedir
      menos campos o cachear más fuerte. **Mi preferencia: `store=True`.** Queda
      como pregunta real pendiente para vos.
+     → **[VERIFICADO 2026-08-27]** Resuelta leyendo el modelo directamente: en
+     `ll-odoo/odoo-modules/ll_checklist/models/database/link.py:44-48`, el
+     campo `link_show_name` está declarado con
+     `compute="compute_show_name"` **y `store=True`**. Es justo lo que el
+     frontend prefería. Consecuencia: **no** hay costo de cómputo por request
+     en catálogos grandes por este campo — el valor está materializado en la
+     tabla. Ya no es una pregunta para Chano.
    - 2.3. ¿Qué devolvemos ante un ID inexistente o sin permiso (404 genérico
      para no filtrar existencia, o 403 explícito)? Definilo una vez para no
      tener criterios distintos por endpoint.
@@ -218,6 +354,14 @@ lo que sigue dependiendo genuinamente del backend". Leyenda de los marcadores:
      estricto. Alternativa: exponer el token CSRF para mandarlo en un header en
      cada request. Recomiendo lo primero por simplicidad. Implementarlo es
      backend; yo indico el enfoque.
+     → **[VERIFICADO 2026-08-27]** No es algo que se pueda leer del código
+     (es una decisión de implementación, no un hecho ya definido), pero se
+     confirma el mismo hallazgo que en la pregunta 1: no hay controladores
+     `/api/v1` todavía, así que no hay nada que "eximir" hoy. El enfoque queda
+     igual (eximir esas rutas del CSRF de Odoo + apoyarse en `SameSite` y CORS
+     estricto), y se implementa directamente en el controlador que el
+     frontend va a escribir y mandar como PR (ver 1). Deja de ser una pregunta
+     abierta para Chano y pasa a ser una decisión de implementación del PR.
 
 ## Auth
 
@@ -228,6 +372,59 @@ lo que sigue dependiendo genuinamente del backend". Leyenda de los marcadores:
    de la app de Twitch. Lo que **sí** decido en frontend: el flujo espera volver
    a `/auth/callback?...` y ahí leo el resultado. Con MSW simulo el flujo
    completo, así que puedo construir toda la UI de login social sin bloquearme.
+   → **[VERIFICADO 2026-08-27]** Se verificó en el código que
+   `ll-odoo/odoo-modules/ll_oauth/__manifest__.py` solo declara como `data`
+   `views/auth_oauth.xml` y `views/login_templates.xml`; y que
+   `views/auth_oauth.xml` únicamente agrega el campo `ll_oauth_extra_params`
+   al formulario de `auth.oauth.provider` (heredando
+   `auth_oauth.view_oauth_provider_form`). **No hay ningún registro semilla de
+   `auth.oauth.provider` con Twitch en el código** — un proveedor OAuth se
+   configura a mano en el admin de Odoo (`client_id`/`client_secret` de una
+   app registrada en la consola de developers de Twitch) y esa config vive
+   solo en la base de datos de esa instalación, no en el código versionado.
+   Consecuencia: **deja de bloquear el desarrollo**. Se puede registrar una
+   app de Twitch propia de prueba (gratis) y configurarla en el Odoo local
+   para construir y verificar el flujo OAuth completo end-to-end sin depender
+   de Chano. Lo único que sigue dependiendo genuinamente de él es, al momento
+   del deploy, confirmar si su app de producción está activa y qué
+   `redirect_uri` acepta.
+   >
+   > **Nota sin verificar** (no confundir con lo de arriba, que sí está
+   > verificado): el dueño del proyecto recuerda que "cuando probó el Odoo en
+   > su máquina, el auth de Twitch funcionaba", pero no está seguro. Queda
+   > registrado como recuerdo pendiente de confirmación empírica contra el
+   > Odoo local — no se presenta como hecho hasta probarlo.
+   >
+   > **[VERIFICADO 2026-08-27 — empírico contra Odoo local]** Se levantó
+   > `docker compose --profile backend up -d odoo db` (Odoo en
+   > `localhost:8069`, DB `anitrack` en el contenedor `chambachambure-db-1`) y
+   > se consultó la base viva por `psql`:
+   > `SELECT id, name, enabled, client_id, auth_endpoint, ll_oauth_extra_params
+   > FROM auth_oauth_provider ORDER BY id;` devuelve exactamente 3 filas —
+   > `Odoo.com Accounts` (`enabled=t`), `Facebook Graph` y `Google OAuth2`
+   > (ambos deshabilitados/sin `client_id`) — los tres son los que trae de
+   > fábrica el módulo `auth_oauth` de Odoo. **Ninguno es Twitch.**
+   > `ll_oauth_extra_params` está vacío en los tres. Confirmado también por
+   > `curl http://localhost:8069/web/login`: renderiza un solo botón OAuth,
+   > "Log in with Odoo.com" (`redirect_uri=http://localhost:8069/auth_oauth/signin`),
+   > sin botón de Twitch.
+   >
+   > Conclusión: en el Odoo local, hoy, **Twitch no está deshabilitado — no
+   > existe como proveedor**. Esto **cierra la nota sin verificar de arriba: el
+   > recuerdo del usuario NO se confirma**, al menos no contra este entorno.
+   > Hipótesis más probable (no un hecho verificado): la maquinaria OAuth sí
+   > funciona — el módulo `ll_oauth` está instalado y su personalización activa
+   > (la columna `ll_oauth_extra_params` existe en el esquema de
+   > `auth_oauth_provider`, confirmado) — así que es plausible que el usuario
+   > haya visto el flujo OAuth andando con el botón de Odoo.com y lo haya
+   > asociado a Twitch, o que lo haya probado alguna vez contra la instancia de
+   > Chano (no este entorno local). Matiz importante: la config de proveedores
+   > vive en la base (volumen `odoo_db_data`), así que si alguna vez se hubiera
+   > configurado Twitch en este local, habría persistido. Que no esté significa
+   > o bien que nunca se configuró en local, o bien que la DB se recreó desde
+   > entonces. No cambia la conclusión de la pregunta 6: sigue sin bloquear
+   > seguir construyendo (se puede registrar una app de Twitch de prueba propia
+   > y configurarla acá mismo).
 
    - 6.1. ¿El `redirect_uri` de Twitch está en whitelist fija en la app de
      Twitch, o es configurable por entorno? Necesito una URL de callback
@@ -236,6 +433,15 @@ lo que sigue dependiendo genuinamente del backend". Leyenda de los marcadores:
      Twitch (vos) configura el `redirect_uri`. Requisito del frontend: necesito
      **una URL de callback por entorno** (dev `localhost`, prod). Si es whitelist
      fija, hay que agregar la de dev.
+     → **[VERIFICADO 2026-08-27]** Para desarrollo, deja de bloquear: como se
+     verificó en la pregunta 6 que el proveedor OAuth se configura a mano
+     (no hay seed en el código), se puede registrar una app de Twitch propia
+     de prueba con su propio `redirect_uri` de `localhost` apuntando al Odoo
+     local, y probar el flujo completo sin depender de Chano. Lo que sigue
+     genuinamente bloqueado es solo la parte de **producción**: si la
+     whitelist del `redirect_uri` en la app de Twitch de Chano es fija o
+     configurable, y si acepta agregar la URL de prod del frontend — eso solo
+     lo sabe él, y se confirma recién al momento del deploy.
    - 6.2. ¿Qué pasa si el usuario cancela el login en Twitch o Twitch devuelve
      error? ¿Odoo redirige con algún query param de error que pueda leer la SPA
      (`?error=access_denied`), o hay que inferirlo?
@@ -252,6 +458,62 @@ lo que sigue dependiendo genuinamente del backend". Leyenda de los marcadores:
    dato de backend. Requisito frontend: el catálogo se ve **deslogueado**, así
    que sus imágenes **deben** cargar sin sesión. Si no lo son, hace falta un
    controller público de imágenes.
+   → **[VERIFICADO 2026-08-27]** Resuelta, y la respuesta es **no**, con un
+   alcance mayor al que la pregunta asumía. En
+   `ll-odoo/odoo-modules/ll_checklist/security/administrator.xml` las reglas
+   `ir.model.access` de **todos** los modelos del módulo (`ll.checklist.image`,
+   `ll.checklist.image.group`, `ll.checklist.franchise`, `ll.checklist.content`,
+   `ll.checklist.version`, `ll.checklist.db.name`, `ll.checklist.genre`,
+   `ll.checklist.platform`, `ll.checklist.country`, `ll.checklist.company`,
+   `ll.checklist.link`, `ll.checklist.checklist`, `ll.checklist.user`, etc.)
+   están atadas **exclusivamente** al grupo `rg_ll_checklist_administrator`. En
+   `ll-odoo/odoo-modules/ll_checklist/security/groups.xml` no existe ningún
+   grupo `public` ni `portal`, y el `__manifest__.py` de `ll_checklist` solo
+   depende de `base` (nada que otorgue acceso anónimo, como `website`). En
+   Odoo, sin una regla `ir.model.access` explícita para el usuario público, el
+   acceso se **deniega por default**.
+   >
+   > Consecuencia más amplia que la pregunta original: hoy, tal cual está el
+   > código, **nada del catálogo es legible sin sesión** — no es solo un
+   > problema de imágenes. Esto deja de ser una pregunta abierta y pasa a ser
+   > un **requisito `[FE→BE]` concreto**: hace falta o bien reglas de acceso
+   > para el usuario público, o bien que los endpoints REST públicos (los que
+   > el frontend va a proponer en el PR de la pregunta 1) lean con `sudo()`
+   > acotado — ese es el camino que se va a proponer con código, no en
+   > abstracto.
+   >
+   > **[VERIFICADO 2026-08-27 — doble, código + base viva]** Se confirmó lo
+   > mismo consultando por `psql` la base del Odoo local (`docker compose
+   > --profile backend up -d odoo db`, DB `anitrack`): un join de
+   > `ir_model_access` con `ir_model` y `res_groups` filtrando
+   > `model LIKE 'll.checklist%'` devuelve **16 filas**, una por modelo
+   > (`checklist`, `company`, `content`, `country`, `db.name`, `franchise`,
+   > `genre`, `image`, `image.group`, `link`, `link.copy`, `platform`,
+   > `shared.access`, `user`, `version`, `wizard.link`), y **todas** con el
+   > grupo `LL Checklist / Administrator`. Cero reglas para público o portal.
+   > Que la lectura del código (`administrator.xml`) y la consulta a la base
+   > viva coincidan exactamente le da más peso a este hallazgo: confirma que
+   > hace falta trabajo real de backend para que el catálogo se vea
+   > deslogueado — no es una lectura errónea del XML ni algo que un dato
+   > sembrado distinto en runtime pudiera contradecir.
+
+   > **[VERIFICADO 2026-08-30 — matiz sobre `/web/image` + solución
+   > construida]** Se probó `GET /web/image/ll.checklist.image/35/image_binary`
+   > **sin sesión**: responde HTTP **200**, pero el cuerpo son 6078 bytes del
+   > **placeholder gris genérico de Odoo**, no la imagen real (la real es un
+   > SVG de 555 bytes — la misma que sí devuelve `/api/v1/images/35`; el id
+   > es el de esa corrida y cambia al re-sembrar con `--reset`). Es
+   > decir: el acceso sigue denegado en los hechos, pero Odoo **degrada en
+   > silencio a un placeholder en vez de dar 403/404**, lo cual es peor para
+   > depurar que un error limpio (un frontend integrado contra `/web/image`
+   > vería cuadros grises sin ninguna señal de error). Esto no cambia la
+   > conclusión de arriba, la precisa: el requisito `[FE→BE]` queda resuelto
+   > del lado frontend con la ruta propia `/api/v1/images/<id>` del
+   > controlador de ADR-010 (ver pregunta 1, verificación 2026-08-30): sirve
+   > el binario real con `sudo()`, detecta el mimetype, manda
+   > `Cache-Control: public, max-age=86400` + `ETag`, con revalidación
+   > `If-None-Match` → `304` verificada. Detalle completo en
+   > `docs/11-spike-integracion-real.md`.
 
    - 7.1. ¿Ya existen distintos tamaños/thumbnails generados (para no bajar la
      imagen full en el grid de catálogo), o los recorto yo del lado frontend?
@@ -318,6 +580,15 @@ lo que sigue dependiendo genuinamente del backend". Leyenda de los marcadores:
      **catálogo curado** y la UI confía en la data, sin dedup defensivo pesado.
      Si en realidad cualquiera puede cargar, avisá y agrego tolerancia a
      duplicados. Es dato de backend, pero mi asunción es segura para v1.
+     → **[VERIFICADO 2026-08-27 — parcial, solo entorno local]** Se confirmó
+     por query directa contra la base del Odoo local que
+     `ll_checklist_franchise`, `ll_checklist_content` y `ll_checklist_version`
+     están en **0** filas — es decir, en este entorno **no hay ningún dato de
+     catálogo cargado**, ni curado ni sucio: simplemente no existe todavía
+     (detalle completo en la "Actualización (2026-08-27)" de la ronda de
+     verificación, más arriba, y en 14.1). Esto no responde si el catálogo de
+     **producción** de Chano es curado o no — eso sigue sin saberse y sigue
+     siendo `[FE→BE]` tal cual estaba.
    - 9.2. Un `ll.checklist.link` (progreso) — ¿pertenece siempre a un único
      usuario, o hay algún escenario de checklist colaborativo/compartido más
      allá del `published` de solo lectura?
@@ -405,6 +676,19 @@ lo que sigue dependiendo genuinamente del backend". Leyenda de los marcadores:
     integración levanto **Odoo local** (Docker, doc 09) y cargo ahí 5–10
     franquicias yo mismo; te paso mi seed de MSW como referencia. No dependo de
     que cargues datos en un staging que no existe.
+    → **[VERIFICADO 2026-08-27 — empírico]** Se verificó por query directa
+    contra la base viva del Odoo local (`docker compose --profile backend up
+    -d odoo db`, DB `anitrack`) que la carga descrita arriba **todavía no se
+    hizo**: `ll_checklist_franchise`/`content`/`version`/`link` están en 0
+    filas; solo hay `ll_checklist_user` (1, el perfil propio) y
+    `ll_checklist_checklist` (7, checklists de una sesión anterior). Falta
+    cargar manualmente las franquicias de prueba antes del spike 2.8 (probar
+    el endpoint de franchises contra este mismo Odoo local) — si no, el
+    endpoint respondería una lista vacía y el spike no probaría nada. También
+    se confirmó, contra `res_groups_users_rel`, que el usuario `admin` de esta
+    base **ya tiene** el grupo `LL Checklist / Administrator` (el menú es
+    visible) — no hace falta repetir el fix manual de doc 09, salvo que se
+    recree la base de datos desde cero (volumen `odoo_db_data`).
 
     - 14.1. ¿Alguna franquicia de prueba en particular que ya tengas cargada en
       tu entorno de desarrollo, para no duplicar el trabajo de carga?

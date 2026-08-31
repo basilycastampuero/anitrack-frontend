@@ -18,8 +18,11 @@ Los números de archivo son los de la numeración original de planificación (ve
 **Estado:** bloqueo #1 del proyecto — la conversación con Chano usando el doc 08
 empezó (respondió la sección de hosting/deploy: Railway self-hosted, sin
 staging remoto cómodo, frontend debe correr contra Odoo local), pero faltan
-las demás secciones (transporte de API, CORS/deploy, auth, campos [EXT]),
-algunas bloqueantes para el Sprint 3a (tarea 3.3, OAuth de Twitch) y para el
-Sprint 4 (tarea 4.1, integración real). Mientras tanto, el
-frontend construye contra MSW sin depender de esto (ADR-001 en
+las demás secciones (auth, campos [EXT]), algunas bloqueantes para el Sprint
+3a (tarea 3.3, OAuth de Twitch). El transporte de API dejó de depender de una
+respuesta suya: el frontend escribió el controlador REST él mismo (rama
+`anitrack/rest-catalog-api` de `ll-odoo`, sin commitear/pushear aún — ver
+pregunta 1 y 7 del doc 08, y [`../docs/11-spike-integracion-real.md`](../docs/11-spike-integracion-real.md)),
+cerrando también la tarea 2.8 del plan (adaptador: no hace falta). Mientras
+tanto, el frontend construye contra MSW sin depender de esto (ADR-001 en
 [`../docs/03-decisiones-arquitectura.md`](../docs/03-decisiones-arquitectura.md)).
