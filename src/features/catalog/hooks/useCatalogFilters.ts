@@ -1,10 +1,8 @@
 import { useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import type { CatalogFilters } from '@/features/catalog/types'
-import type { ContentType, VideoType } from '@/types/media.types'
+import { CONTENT_TYPES, VIDEO_TYPES } from '@/types/media.types'
 
-const CONTENT_TYPES: ContentType[] = ['G', 'V']
-const VIDEO_TYPES: VideoType[] = ['C', 'M', 'OVA', 'ONA', 'S', 'TV']
 const SORTS: NonNullable<CatalogFilters['sort']>[] = [
   'name',
   'releaseDate',
