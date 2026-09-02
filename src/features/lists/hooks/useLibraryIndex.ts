@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { listsService } from '@/features/lists/services/lists.service'
+import { listKeys } from '@/features/lists/hooks/queryKeys'
 import { useSessionStore } from '@/store/sessionStore'
 
 /**
@@ -9,7 +10,7 @@ import { useSessionStore } from '@/store/sessionStore'
 export function useLibraryIndex() {
   const status = useSessionStore((s) => s.status)
   return useQuery({
-    queryKey: ['lists', 'library-index'],
+    queryKey: listKeys.libraryIndex(),
     queryFn: () => listsService.getLibraryIndex(),
     enabled: status === 'authenticated',
     staleTime: 30_000,

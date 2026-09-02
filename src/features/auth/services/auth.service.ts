@@ -1,23 +1,29 @@
 import { http } from '@/lib/http'
-import {
-  meResponseSchema,
-  userSessionSchema,
-} from '@/features/auth/services/schemas'
-import { z } from 'zod'
-import type { LoginRequest, UserSession } from '@/features/auth/types'
+import { userEnvelopeSchema } from '@/features/auth/services/schemas'
+import type {
+  LoginRequest,
+  RegisterRequest,
+  UserSession,
+} from '@/features/auth/types'
 
 export const authService = {
   async me(): Promise<UserSession> {
     const { data } = await http.get('/auth/me')
-    return meResponseSchema.parse(data).user
+    return userEnvelopeSchema.parse(data).user
   },
 
   async login(body: LoginRequest): Promise<UserSession> {
     const { data } = await http.post('/auth/login', body)
-    return z.object({ user: userSessionSchema }).parse(data).user
+    return userEnvelopeSchema.parse(data).user
   },
 
   async logout(): Promise<void> {
     await http.post('/auth/logout')
+  },
+
+  /** El registro autentica de una: la respuesta ya trae la sesión (ADR-015). */
+  async register(body: RegisterRequest): Promise<UserSession> {
+    const { data } = await http.post('/auth/register', body)
+    return userEnvelopeSchema.parse(data).user
   },
 }

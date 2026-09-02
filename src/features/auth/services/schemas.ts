@@ -9,4 +9,6 @@ export const userSessionSchema = z.object({
   avatarUrl: z.string().nullable(),
 })
 
-export const meResponseSchema = z.object({ user: userSessionSchema })
+/** Envelope `{ user }` compartido por login, register y me (doc 04). */
+export const userEnvelopeSchema = z.object({ user: userSessionSchema })
+export const meResponseSchema = userEnvelopeSchema

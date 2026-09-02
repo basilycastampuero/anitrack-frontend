@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { authService } from '@/features/auth/services/auth.service'
+import { authKeys } from '@/features/auth/hooks/queryKeys'
 import { useSessionStore } from '@/store/sessionStore'
 import { ApiError } from '@/types/api.types'
 
@@ -13,7 +14,7 @@ export function useMe() {
   const clearSession = useSessionStore((s) => s.clearSession)
 
   const query = useQuery({
-    queryKey: ['auth', 'me'],
+    queryKey: authKeys.me(),
     queryFn: () => authService.me(),
     retry: (count, error) =>
       error instanceof ApiError && error.code === 'UNAUTHORIZED'
