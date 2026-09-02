@@ -16,9 +16,13 @@
 | 0.2 | Validar decisiones de docs 03–06 con vos (dueño) | ADRs marcados aceptados/ajustados | ✅ |
 | 0.3 | Crear repo `anitrack-frontend` en GitHub | Repo con README apuntando a estos docs | ✅ `basilycastampuero/anitrack-frontend` — en la cuenta **principal**, no en la secundaria que preveía esta tarea (motivo en [10-sprint2-avance.md](./10-sprint2-avance.md)). `main` y `sprint-2-catalogo` pusheadas |
 
-> ⚠️ **0.1 es el bloqueo #1 y sigue abierto.** Sin las respuestas de transporte
-> y auth, las tareas 3.3 (OAuth Twitch) y 4.1 (integración real) no tienen
-> insumo. No bloquea el resto del plan (MSW cubre el 100%) y el spike 2.8 ya se
+> ⚠️ **0.1 sigue abierto, pero dejó de ser el bloqueo #1** (actualizado
+> 2026-08-31). El transporte se resolvió leyendo y escribiendo el backend
+> (ADR-010/011 para el catálogo, ADR-014/015/016 para auth y listas), y la
+> política sobre `ll-odoo` ahora permite trabajarlo en local. Lo que queda
+> genuinamente en manos de Chano es de **producción**: el `redirect_uri` de
+> su app de Twitch (3.3b), el `invitation_scope` de la instancia real
+> (ADR-015) y si acepta el trabajo como PR. No bloquea el resto del plan (MSW cubre el 100%) y el spike 2.8 ya se
 > puede hacer contra el Odoo local, pero cuanto más tarde lleguen las
 > respuestas, más caro sale el adaptador del Sprint 4.
 
@@ -85,21 +89,84 @@ del producto y donde vive todo el riesgo técnico (optimistic + rollback).
 **Objetivo demo:** iniciar sesión, crear y organizar listas propias, ver sus
 entries (todavía sin poder modificar progreso).
 
+> **Replanificado el 2026-08-31** tras el diseño técnico del sprint. El *qué*
+> no cambió; el *cómo* está en [12-diseno-sprint3a.md](./12-diseno-sprint3a.md)
+> y las decisiones de peso quedaron como **ADR-014 a ADR-017**. Cambios
+> respecto de la versión anterior de esta tabla, con su motivo:
+>
+> - **Dos carriles (ADR-017).** El carril **A** (frontend, contra MSW) es el
+>   camino crítico y no depende del carril **B** (backend en `ll-odoo`), que
+>   ahora es posible porque la política sobre ese repo cambió. Las tareas de
+>   backend se numeran **B1–B5** para no romper la numeración 3.1–3.11, que
+>   otros documentos referencian.
+> - **3.5 se parte en 3.5a/3.5b/3.5c.** Tal como estaba era tres tareas
+>   disfrazadas de una: árbol accesible (ARIA `tree`), CRUD con cuatro
+>   mutaciones, y el onboarding de *starter lists* (ADR-003, lo único que toca
+>   el dominio).
+> - **El CA de 3.5 pedía optimistic updates**, pero el corte 3a/3b se definió
+>   justamente en "donde aparece el riesgo del optimistic", y los conceptos de
+>   optimistic están listados en 3b. Se resuelve así: optimistic **solo** en
+>   las mutaciones idempotentes sobre un nodo que ya existe (renombrar,
+>   publicar); crear y borrar van por invalidación, porque el optimistic ahí
+>   obliga a ids temporales y reconciliación del árbol — costo alto, valor
+>   bajo, y el aprendizaje profundo del patrón sigue siendo 3.7.
+> - **El CA de 3.6 era inverificable** ("renderiza igual que Odoo"): la
+>   agregación la calcula `compute_show_name` en Python y el contrato (doc 04)
+>   dice que `aggregatedProgress` llega **pre-calculado**. Reformulado contra
+>   el contrato, que sí se puede testear.
+> - **3.3 (OAuth Twitch) se parte y se mueve** — ver la nota debajo de la
+>   tabla.
+
+#### Carril A — frontend (camino crítico, contra MSW)
+
 | # | Tarea | Detalle | CA |
 |---|---|---|---|
-| 3.1 | `auth.service` + store sesión | login/logout/me; Zustand `sessionStore`; `<RequireAuth>` | Redirect a login y `next=` funcionan |
-| 3.2 | Páginas login/register | RHF + Zod, errores de API en el form | Estados: éxito, credenciales malas, server error |
-| 3.4 | `lists.service` + hooks | CRUD checklists, entries, links, library-index | Tests |
-| 3.5 | ChecklistTree | Árbol accesible + CRUD carpetas + onboarding "starter lists" | Crear/renombrar/borrar/publicar con optimistic |
-| 3.6 | Vista de entries | `ListEntryRow` + `FranchiseEntryGroup` + `ProgressBar` | Agregación `[S1 12/12]` renderiza igual que Odoo |
-| 3.3 | ⚠️ Callback OAuth Twitch | Según respuesta backend; con MSW se simula | Flujo mock completo |
+| 3.1 | `auth.service` + store sesión | Ya existen `auth.service`, `sessionStore`, `useMe` y `<RequireAuth>` (Sprint 1). Falta: hooks `useLogin`/`useLogout`/`useRegister` con invalidación de `['auth','me']`, header `X-Requested-With` en la instancia de axios (ADR-016), y limpiar todo el cache privado en el logout | Login setea sesión y redirige a `next=`; logout deja el cache sin datos de `/me/*`; test del ciclo login→logout |
+| 3.2 | Páginas login/register | RHF + Zod, errores de API mapeados al form, link a OAuth (ver 3.3a) | Estados demostrables: éxito, credenciales malas, `VALIDATION` de campo, server error |
+| 3.3a | Botón de login social (mock) | Solo la UI: botón "Continue with Twitch" + `/auth/callback` que lee `?error=` y llama `me`. Sin proveedor real | Flujo mock completo de punta a punta; `?error=access_denied` muestra mensaje propio |
+| 3.4 | `lists.service` + hooks | Ya existen `getChecklists`/`getEntries`/`getLibraryIndex`. Falta: `create`/`update`/`remove` de checklists y el resto de hooks + `queryKeys` centralizadas | Tests con MSW de cada mutación y de la invalidación que dispara |
+| 3.5a | `ChecklistTree` accesible (solo lectura) | Patrón ARIA `tree`/`treeitem` con roving tabindex; expandir/colapsar; selección sincronizada con `/my-lists/:checklistId` | Navegación completa por teclado (flechas, Home/End, Enter); refresh conserva la lista seleccionada |
+| 3.5b | CRUD de carpetas | Crear (raíz y sub), renombrar, borrar con confirmación, toggle publicar | Renombrar y publicar son optimistic con rollback; crear y borrar invalidan; los 4 con estado de error visible |
+| 3.5c | Onboarding "starter lists" | EmptyState con CTA que crea Watching / Completed / On Hold / Dropped / Plan to Watch (ADR-003) | Usuario sin listas ve el CTA; al aceptar quedan las 5 listas y el árbol se puebla |
+| 3.6 | Vista de entries | `ListEntryRow` + `FranchiseEntryGroup` + `ProgressBar`, en modo **lectura** (el stepper es 3.7) | Dado un `aggregatedProgress` del contrato, el grupo renderiza `[S1 12/12] - [S2 03/-]`; hay test del caso "total desconocido" y del entry suelto |
 
-> 3.3 va **al final** del sprint a propósito: depende de la Fase 0.1, que sigue
-> abierta. Con login por credenciales (3.1/3.2) el sprint ya cumple su objetivo
-> demo; si no hay respuesta de Chano, 3.3 se corre a 3b sin costo.
+#### Carril B — backend en `ll-odoo` (rama `anitrack/rest-auth-lists`, nunca se pushea al remoto de Chano)
 
-**Conceptos:** auth por cookie en SPA (por qué no localStorage tokens);
-invalidación selectiva de queries; árboles accesibles (roles ARIA `tree`).
+| # | Tarea | Detalle | CA |
+|---|---|---|---|
+| B1 | Spike de sesión | `security/portal_access.xml` en `ll_webpage` (ADR-014) + `POST /auth/login`, `POST /auth/logout`, `GET /auth/me` (ADR-015/016). **Va primero**, antes que 3.5 del carril A | Con `curl`: login de un usuario portal devuelve `UserSession` y cookie `SameSite=Lax`; `me` sin cookie da `401` con el sobre del contrato; un POST sin el header da `403` |
+| B2 | Seed de listas en el Odoo local | Extender `scripts/seed-odoo.mjs` con el usuario portal del seed de MSW, sus checklists anidadas y sus links | `npm run seed:odoo` sigue siendo idempotente y deja un usuario portal con listas equivalentes a las de MSW |
+| B3 | Endpoints `/me/*` de lectura | `GET /me/checklists` (filtrando `checklist_database = False` en todos los niveles), `/me/checklists/:id/entries` con `aggregatedProgress` replicando `compute_show_name`, `/me/library-index` | Las tres respuestas validan contra los esquemas Zod del frontend |
+| B4 | Endpoints `/me/*` de escritura + fuga de imágenes | CRUD de checklists; y cerrar la deuda de ADR-014: `/api/v1/images/<id>` pasa a exigir pertenencia a catálogo publicado, y las imágenes privadas van por ruta autenticada | Un usuario no puede leer ni escribir la lista de otro (test con dos usuarios portal); una imagen de checklist privada da `404` en la ruta pública |
+| B5 | Checkpoint de contrato | Correr los esquemas Zod del frontend contra las respuestas reales de auth + listas, como el spike 2.8 | Todos los esquemas en verde, o el drift documentado con su decisión |
+
+> **3.3 (OAuth Twitch) cambia de forma y se mueve a 3b.** Verificado el
+> 2026-08-30 y de nuevo el 2026-08-31 contra el Odoo local: existen 3
+> proveedores OAuth de fábrica (Odoo.com habilitado, Facebook y Google
+> deshabilitados) y **ninguno es Twitch**; `/web/login` solo ofrece Odoo.com.
+> El módulo `ll_oauth` **no** es un módulo de Twitch: agrega el campo
+> `ll_oauth_extra_params` al formulario de `auth.oauth.provider` y sincroniza
+> nombre/email/foto en `_auth_oauth_signin` — maquinaria genérica y útil, pero
+> el proveedor es configuración que vive en la base, no en el código.
+> Consecuencia: la parte que **no** depende de nadie (botón, ruta de callback,
+> manejo de `?error=`) es barata y se hace ahora como **3.3a**; la parte cara
+> —registrar una app en Twitch, crear el `auth.oauth.provider`, y verificar en
+> qué grupo cae el usuario que crea `_auth_oauth_signin`— se hace end-to-end
+> en 3b como **3.3b**, donde ya no compite con el camino crítico del sprint.
+
+**Orden y paralelismo.** B1 arranca primero (descubre el riesgo de
+cookie/CSRF/ACL con margen). En el carril A, 3.1 y 3.2 abren el sprint; 3.4 no
+depende de ellos (MSW ya deja al usuario 1 logueado por default), así que
+**3.4 y 3.6 pueden ir en paralelo a 3.1/3.2**. 3.5a→3.5b→3.5c es una cadena y
+es la parte más cara. 3.3a se puede hacer en cualquier momento después de 3.2.
+Detalle completo, con el grafo de dependencias y los archivos que toca cada
+tarea, en [12-diseno-sprint3a.md](./12-diseno-sprint3a.md).
+
+**Conceptos a aprender en este sprint:** auth por cookie en SPA (por qué no
+tokens en `localStorage`); CSRF y por qué aparece recién ahora que hay
+POST/PATCH/DELETE; ACL vs. reglas de registro en un ORM (`ir.model.access` vs.
+`ir.rule`); invalidación selectiva de queries; árboles accesibles (rol ARIA
+`tree` y roving tabindex).
 
 ### Sprint 3b — Tracking y vinculación (semanas 7–8)
 
@@ -113,6 +180,7 @@ optimistic update, ver el perfil público con stats.
 | 3.9 | `library-index` en catálogo | Cards muestran "in your list" | Se actualiza al agregar/quitar | 🟡 importante |
 | 3.10 | Perfil público + stats | StatsGrid client-side v1 | Perfil vacío (EmptyState) y poblado | 🟡 importante |
 | 3.11 | RatingStars + notas [flag] | ADR-004; visible solo con flag | Flag off ⇒ ni rastro en la UI | ⚪ recortable |
+| 3.3b | ⚠️ OAuth Twitch end-to-end | Registrar una app de Twitch propia, crear el `auth.oauth.provider` en el Odoo local, verificar en qué grupo cae el usuario que crea `_auth_oauth_signin` (ADR-015 espera Portal) | Login por Twitch real contra el Odoo local, de punta a punta | ⚪ recortable |
 
 3.7 y 3.8 son el producto: sin ellos AniTrack es un catálogo con listas vacías.
 Si el sprint se desborda, lo que se recorta es 3.11 primero y 3.10 después
@@ -156,4 +224,8 @@ path.
 | Modelo Odoo cambia (rama activa) | Media | Medio | Contrato acordado temprano (Fase 0); re-mapear solo en adaptador |
 | CORS/cookies bloquean integración | Media | Alto | ADR-005 same-origin por proxy; plan B CORS documentado |
 | Scope creep del brief (reviews, recomendaciones) | Media | Medio | Doc 01 fija alcance; extras = v2 |
+| **Divergencia silenciosa MSW vs. backend** (ADR-017: dos implementaciones del mismo contrato durante 3a) | Alta | Medio | Checkpoint de contrato B5 con los esquemas Zod del frontend contra las respuestas reales; es obligatorio para cerrar el sprint |
+| **Las reglas de ADR-014 rompen el backoffice de Chano** (una `ir.rule` mal acotada aplica también al grupo Administrator — ya pasó en la prueba con `global=True`) | Baja | Alto | Las reglas van con `groups=[base.group_portal]`, nunca `global`; viven en `ll_webpage`, no en `ll_checklist`; test de regresión que verifica que el admin conserva read/write/unlink |
+| **Fuga de imágenes privadas por `/api/v1/images/<id>`** (sirve cualquier imagen por id con `sudo()`, sin filtro; hoy inocuo, deja de serlo cuando una checklist tenga imagen) | Media | Medio | Tarea B4: la ruta pública exige pertenencia a catálogo publicado; las privadas van por ruta autenticada |
+| **`auth_signup.invitation_scope` en `b2b` en producción** ⇒ el registro por email falla (es config de la base, no del código) | Media | Bajo | `/auth/register` devuelve `403 FORBIDDEN` con mensaje explícito y el formulario se oculta por flag (ADR-015); confirmar con Chano antes del deploy |
 | Plazo más corto que las 10 semanas del plan | — | Alto | Orden de recorte explícito: primero los ⚪ (3.11, 4.9, 4.10), después los 🟡 de S3b (3.10, 3.9), después S4 al mínimo (4.1 fuera + deploy + README). S1→S3b son el producto y no se tocan |

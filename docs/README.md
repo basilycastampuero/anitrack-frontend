@@ -20,6 +20,7 @@
 | [09-sprint1-completado.md](./09-sprint1-completado.md) | Bitácora: qué se construyó en el setup/Sprint 1, decisiones tomadas sobre la marcha y verificación |
 | [10-sprint2-avance.md](./10-sprint2-avance.md) | Bitácora: avance del Sprint 2 (catálogo) en curso — estado real por tarea, decisiones sobre la marcha y verificación |
 | [11-spike-integracion-real.md](./11-spike-integracion-real.md) | Bitácora: spike de integración real (tarea 2.8) — seed del catálogo contra Odoo local, controlador REST propio en `ll-odoo` (sin pushear) y decisión "no hace falta adaptador" |
+| [12-diseno-sprint3a.md](./12-diseno-sprint3a.md) | Diseño técnico del Sprint 3a: el *cómo* de auth + listas — responsabilidades por capa, contratos, plan por tarea con archivos, y los dos carriles (frontend contra MSW / backend en `ll-odoo`) |
 | [anitrack_ai_context.md](./anitrack_ai_context.md) | Brief original del proyecto (visión tipo MyAnimeList). Referencia histórica: el backend real NO implementa este modelo tal cual — ver el gap en [`../docs-backend/02-analisis-backend-odoo.md`](../docs-backend/02-analisis-backend-odoo.md) |
 
 Los números de archivo (01, 03...) se conservan de la numeración original de
@@ -49,10 +50,15 @@ emulando la UX de MyAnimeList mediante listas sugeridas por defecto. Los
 features que faltan en backend (rating, notas, fechas) quedan mockeados
 detrás de un feature flag y documentados como propuesta de extensión para Chano.
 
-**El bloqueo #1** es la conversación pendiente con Chano: transporte de API (REST
-custom vs JSON-RPC), CORS/deploy y auth para SPA. [`../docs-backend/08-preguntas-backend.md`](../docs-backend/08-preguntas-backend.md)
-tiene las preguntas listas para enviar. Mientras tanto, MSW permite construir el
-100% del frontend sin backend.
+**El bloqueo #1 dejó de serlo** (actualizado 2026-08-31): el transporte se
+resolvió leyendo y escribiendo el backend en local —ADR-010/011 para el
+catálogo, ADR-014/015/016 para auth y listas— y la política sobre `ll-odoo`
+ahora permite trabajarlo. Lo que sigue en manos de Chano es solo de
+producción (su app de Twitch, el `invitation_scope` de su instancia, y si
+acepta el trabajo como PR). La conversación original, con lo respondido y lo que
+sigue abierto, vive en [`../docs-backend/08-preguntas-backend.md`](../docs-backend/08-preguntas-backend.md).
+Mientras tanto MSW sigue cubriendo el 100% del frontend, que es lo que ADR-017
+mantiene como camino crítico del Sprint 3a.
 
 ## Estado del proyecto
 
@@ -63,7 +69,7 @@ tiene las preguntas listas para enviar. Mientras tanto, MSW permite construir el
 - [ ] Conversación con Chano (usar [`../docs-backend/08-preguntas-backend.md`](../docs-backend/08-preguntas-backend.md)) — en curso: respondió hosting, faltan las demás secciones
 - [x] Repo remoto del frontend creado y pusheado en GitHub (`basilycastampuero/anitrack-frontend`, cuenta principal — Fase 0.3, ver [10-sprint2-avance.md](./10-sprint2-avance.md))
 - [x] **Sprint 2 completado** — catálogo de punta a punta (grid → franquicia → contenido → versiones), búsqueda y filtros, objetivo demo cumplido. Las 8 tareas (2.1–2.8) ✅ — ver [10-sprint2-avance.md](./10-sprint2-avance.md) (bitácora completa, cierre en la sección "Actualización 2026-08-31 — Tareas 2.6 y 2.7 + Cierre de Sprint 2") y [11-spike-integracion-real.md](./11-spike-integracion-real.md) (spike 2.8: no hace falta adaptador)
-- [ ] Sprint 3a — auth + estructura de listas (camino crítico actual)
+- [ ] Sprint 3a — auth + estructura de listas (camino crítico actual). Diseñado y replanificado el 2026-08-31: ver [12-diseno-sprint3a.md](./12-diseno-sprint3a.md) y **ADR-014 a ADR-017** (aislamiento de datos privados, identidad, transporte de sesión/CSRF, MSW vs. backend en paralelo)
 - [ ] Sprint 3b — tracking y vinculación
 - [ ] Sprint 4 — integración, pulido y deploy
 

@@ -355,3 +355,299 @@ responsabilidad propia de mantener el manejo de teclado (flechas, Enter,
 Escape, `aria-activedescendant`) correcto — un primitivo de terceros
 absorbería ese mantenimiento. Aceptado porque el alcance es un único
 componente, no un patrón que se repita varias veces en la app.
+
+---
+
+## ADR-014 — Aislamiento de datos privados: ACL para el grupo Portal + `ir.rule` por dueño acotada a ese grupo, y endpoints `/me/*` sin `sudo()`
+
+**Contexto.** ADR-010 resolvió el catálogo público con `auth="public"` +
+`sudo()` + filtro `published`. Ese modelo **no se puede extender** a
+`/api/v1/me/*` (Sprint 3a): checklists y links son datos privados, y `sudo()`
+bypassa toda ACL, así que el aislamiento entre usuarios pasaría a depender
+enteramente de que cada endpoint recuerde filtrar por dueño.
+
+Verificado contra el Odoo local (2026-08-31, DB `anitrack`, Odoo 17.0):
+
+- Los 16 modelos de `ll_checklist` tienen su `ir.model.access` atada
+  exclusivamente al grupo `LL Checklist / Administrator`, y **no existe ni una
+  sola `ir.rule`** en el módulo (consulta directa a `ir.model.access` e
+  `ir.rule`).
+- Se crearon dos usuarios de prueba en la base local
+  (`portaltest@anitrack.dev`, grupo Portal; `usertest@anitrack.dev`, Internal
+  User). Ambos reciben `AccessError` en `ll.checklist.checklist`,
+  `ll.checklist.link` y `ll.checklist.user`. Es decir: **hoy un usuario
+  logueado no puede leer ni sus propias listas**, y
+  `ll.checklist.user.extra_get_user()` —que `Checklist.default_get` usa para
+  resolver el perfil— también falla.
+
+Hay un dato del modelo de Chano que inclina la decisión: la lógica que el
+Sprint 3b va a reutilizar hace `search()` **sin filtro de dueño**.
+`ll.checklist.wizard.link.action_link_to_checklist()` busca
+`[("link_version_id", "=", version.id)]` sobre **todos** los links de la base
+para detectar el caso "ya está vinculado". Bajo ACL del ORM esa búsqueda la
+acota la `ir.rule` automáticamente; bajo `sudo()` devuelve los links de todos
+los usuarios — exactamente la fuga que el `409 ALREADY_LINKED` del contrato
+(doc 04) le expondría al frontend, con nombres de listas ajenas adentro.
+
+**Alternativas consideradas.**
+
+1. `sudo()` + filtro de propiedad escrito a mano en el controlador (extender
+   ADR-010 tal cual). Descartada por tres motivos: el aislamiento pasa a
+   depender de recordar el filtro en cada ruta nueva; no protege los `search()`
+   internos del código de Chano que se va a reutilizar; y un bug de omisión no
+   falla ruidosamente — devuelve datos de más, en silencio.
+2. ACL para el grupo Portal + `ir.rule` por dueño **global**. Descartada
+   **tras probarla**: una `ir.rule` con `global=True` aplica a *todos* los
+   usuarios, incluido el grupo Administrator. Con la regla global activa, el
+   propio `admin` (uid 2, miembro de `LL Checklist / Administrator`) perdió el
+   `unlink` sobre `ll.checklist.checklist` — habría roto el backoffice de
+   Chano sin que nadie lo notara hasta usarlo.
+3. **[Elegida]** `ir.model.access` para `base.group_portal` + `ir.rule` por
+   dueño **acotada a ese grupo** (`groups = [base.group_portal]`,
+   `global = False`), y los endpoints `/api/v1/me/*` operando con
+   `request.env` (el usuario real de la sesión), reservando `sudo()`
+   únicamente para leer datos de catálogo ya públicos dentro de esos endpoints
+   (nombres alternativos, versiones, imágenes del catálogo).
+
+**Decisión.** Opción 3. Los registros viven en **`ll_webpage`**
+(`security/portal_access.xml`), **no** en `ll_checklist`: `ll_webpage` ya es
+el módulo donde vive todo el trabajo propio y ya depende de `ll_checklist`,
+así que el diff sobre el módulo de Chano sigue siendo cero y los
+`ir.model.access` pueden referenciar sus modelos por xmlid
+(`ll_checklist.model_ll_checklist_checklist`).
+
+Alcance concreto:
+
+- ACL **read/write/create/unlink** para `base.group_portal` sobre
+  `ll.checklist.checklist`, `ll.checklist.link`, `ll.checklist.link.copy` y
+  `ll.checklist.user`.
+- `ir.rule` por dueño, `global=False`, `groups=[base.group_portal]`, sobre esos
+  cuatro modelos:
+
+  | Modelo | `domain_force` |
+  |---|---|
+  | `ll.checklist.checklist` | `[('checklist_user_id.user_res_user_id','=',user.id)]` |
+  | `ll.checklist.link` | `[('link_checklist_id.checklist_user_id.user_res_user_id','=',user.id)]` |
+  | `ll.checklist.link.copy` | `[('lc_left_id.link_checklist_id.checklist_user_id.user_res_user_id','=',user.id)]` |
+  | `ll.checklist.user` | `[('user_res_user_id','=',user.id)]` |
+
+- **Ninguna ACL de catálogo para Portal.** El catálogo lo sigue sirviendo el
+  controlador público de ADR-010 con `sudo()`; el usuario portal no necesita
+  leerlo por ORM.
+
+Verificado empíricamente con esas reglas puestas —y borradas al terminar, base
+restaurada—: el usuario portal crea y lee **solo** sus propias checklists;
+leer o escribir la de otro dueño da `AccessError`; crear una checklist a
+nombre de otro perfil (`checklist_user_id` ajeno) **también** da `AccessError`,
+o sea la regla cubre el `create` y no solo el `read`; `extra_get_user()`
+funciona y crea el perfil del usuario portal; y el `admin` conserva
+read/write/unlink sobre todo.
+
+**Consecuencias.** Positiva: el aislamiento lo garantiza el ORM, no la
+disciplina del programador, y aplica también a los `search()` internos de la
+lógica de Chano que el Sprint 3b va a reutilizar; el backoffice no cambia de
+comportamiento. Negativa: la superficie de seguridad queda configurada en dos
+lugares con reglas distintas — la regla mnemotécnica es **"público y de solo
+lectura ⇒ `sudo()` + filtro `published` (ADR-010); privado ⇒ ORM del usuario,
+nunca `sudo()`"**. Segunda negativa: todo modelo privado nuevo necesita su par
+ACL + rule o queda inaccesible; falla con `AccessError`, que es el modo de
+falla correcto (ruidoso), a diferencia del de la opción 1.
+
+**Deuda que este ADR deja abierta.** La ruta `/api/v1/images/<id>` de ADR-010
+sirve **cualquier** `ll.checklist.image` por id, con `sudo()` y sin filtro de
+`published` ni de dueño. Hoy es inocuo (todas las imágenes son de catálogo),
+pero `ll.checklist.checklist` tiene `checklist_image_id`: en cuanto un usuario
+adjunte una imagen a una lista propia, queda enumerable públicamente por id.
+Se corrige en el Sprint 3a (tarea B4 del doc 07): la ruta pública filtra por
+pertenencia a un registro de catálogo publicado, y las imágenes privadas se
+sirven por una ruta autenticada aparte.
+
+---
+
+## ADR-015 — Identidad: el perfil `ll.checklist.user` se resuelve perezosamente desde la sesión; el alta de cuenta usa `res.users.signup()`
+
+**Contexto.** El contrato (doc 04) define `UserSession` con dos ids: `id`
+(perfil `ll.checklist.user`) y `odooUserId` (`res.users`). Falta decidir cómo
+se relacionan, qué pasa en un alta y qué pasa si hay sesión sin perfil.
+
+Verificado en el Odoo local (2026-08-31):
+
+- Hay **un solo** registro de `ll.checklist.user` (el del admin).
+- `ll.checklist.user.extra_get_user(uid)` ya es un *get-or-create* completo, y
+  el modelo tiene `_sql_constraints` `unique_res_user` sobre
+  `user_res_user_id`, así que no puede haber perfiles duplicados.
+- `auth_signup` está **instalado**, con `auth_signup.invitation_scope = 'b2c'`
+  (registro libre habilitado) y `auth_signup.reset_password = True`.
+- `res.users.signup()` crea el usuario a partir de
+  `base.template_portal_user_id`: el usuario resultante es **Portal**
+  (`share = true`, grupos `[Portal]`) — comprobado creando
+  `signuptest@anitrack.dev`. Eso cierra la pregunta 8 del doc 08, que estaba
+  `[BLOQUEADA parcial]`.
+
+**Alternativas consideradas.**
+
+1. Crear el perfil `ll.checklist.user` explícitamente en el alta
+   (`POST /auth/register`) y tratar "sesión sin perfil" como un error.
+   Descartada: deja un estado inconsistente posible y permanente para todo
+   usuario creado por cualquier otra vía (OAuth, backoffice, un `res.users`
+   que Chano cree a mano).
+2. **[Elegida]** El perfil se resuelve **perezosamente** en cada punto de
+   entrada autenticado, reutilizando `extra_get_user()` tal cual está en el
+   módulo de Chano.
+
+**Decisión.** Opción 2.
+
+1. `GET /api/v1/auth/me` resuelve
+   `profile = request.env["ll.checklist.user"].extra_get_user(request.env.uid)`
+   y devuelve `{ id: profile.id, odooUserId: request.env.uid, name, email,
+   avatarUrl }`. "Sesión sin perfil" deja de ser un estado alcanzable: la
+   primera petición autenticada lo crea.
+2. Todos los endpoints `/me/*` obtienen el perfil por esa misma vía y **nunca**
+   aceptan un id de dueño en el body. `checklist_user_id` se fija desde la
+   sesión (defensa en profundidad: ADR-014 ya lo impediría a nivel ORM, pero
+   el controlador devuelve un `403` limpio en vez de un `AccessError`).
+3. `POST /api/v1/auth/register` envuelve
+   `request.env["res.users"].sudo().signup({login, name, password})` y después
+   autentica igual que `/auth/login`. Es la **única** llamada con `sudo()` del
+   bloque de auth, y está acotada al alta.
+4. `avatarUrl` sale de `res.users.image_128` por una ruta autenticada propia
+   (`GET /api/v1/me/avatar`), no de `/web/image` (inaccesible sin sesión, ver
+   ADR-006) ni de `/api/v1/images/<id>` (que es del catálogo, ADR-014).
+
+**Consecuencias.** Positiva: un usuario creado por cualquier vía —email/clave,
+OAuth Twitch a futuro, backoffice— obtiene su perfil sin trabajo extra; y el
+alta produce usuarios **Portal**, que es exactamente el grupo al que ADR-014 le
+da acceso y que no puede entrar al backoffice de Odoo. Negativa:
+`auth_signup.invitation_scope` es un parámetro **de la base**, no del código;
+si en producción está en `b2b`, el registro falla. Mitigación:
+`/auth/register` traduce ese caso a `403 { code: "FORBIDDEN" }` con mensaje
+explícito, y el frontend puede ocultar el formulario con un flag de
+`lib/features.ts` (patrón ya establecido en ADR-004). Queda `[FE→BE]`:
+confirmar con Chano el `invitation_scope` de producción y qué pasa si alguien
+se registra por email y después entra por Twitch con el mismo mail (pregunta
+8.2 del doc 08, todavía abierta).
+
+---
+
+## ADR-016 — La sesión viaja por un wrapper propio `/api/v1/auth/*`, no por `/web/session/authenticate`; CSRF por header obligatorio en vez del token de Odoo
+
+**Contexto.** El doc 04 define `POST /auth/login`, `POST /auth/logout` y
+`GET /auth/me`; Odoo ya trae `/web/session/authenticate`. Y el Sprint 3a
+introduce los primeros POST/PATCH/DELETE del proyecto, que es un asunto
+distinto del catálogo (todo GET).
+
+Verificado contra el Odoo local (2026-08-31, Odoo 17.0):
+
+- `/web/session/authenticate` es `type="json"`: responde **HTTP 200 siempre**
+  (el error viaja dentro del sobre JSON-RPC), exige `db` en el body —o sea le
+  filtra el nombre de la base al cliente— y devuelve un blob de 28 claves de
+  estado interno del webclient. Contradice el contrato del doc 04 y la razón
+  de ser de ADR-011.
+- La cookie que emite es `session_id=…; Max-Age=604800; HttpOnly; Path=/`,
+  **sin `SameSite` y sin `Secure`**.
+- En `odoo/http.py`, `CSRF_FREE_METHODS = ('GET','HEAD','OPTIONS','TRACE')`:
+  para rutas `type="http"`, el CSRF se valida en **POST, PATCH, PUT y DELETE**,
+  y el token se lee de `request.params` (form-data o query string), **no** de
+  un header. Comprobado en vivo: `POST /web/login` sin token →
+  `400 Session expired (invalid CSRF token)`. Un API con body JSON no puede
+  alimentar ese mecanismo sin ensuciar la URL o el body con `csrf_token`.
+- Una ruta `type="http"` con `auth="user"` sin sesión **no** devuelve 401:
+  redirige. Comprobado: `GET /web` sin cookie → `303` hacia `/web/login`.
+
+**Decisión.**
+
+1. `POST /api/v1/auth/login` propio (`type="http"`, `auth="public"`,
+   `csrf=False`) llama `request.session.authenticate(request.db, login,
+   password)` y devuelve `200 {user: UserSession}` o
+   `401 {error:{code:"UNAUTHORIZED"}}`, exactamente el contrato del doc 04.
+   `POST /api/v1/auth/logout` → `request.session.logout(keep_db=True)` +
+   `204`. El frontend nunca ve el nombre de la base ni el sobre JSON-RPC.
+2. La respuesta de login **re-emite la cookie de sesión explícitamente** con
+   `SameSite=Lax`, `HttpOnly`, `Path=/` y `Secure` cuando el request llega por
+   https. Odoo no lo hace por su cuenta y no tiene un setting para eso.
+3. **Todas** las rutas de `/api/v1`, incluidas las de `/me/*`, se declaran
+   `auth="public"` y comprueban la sesión ellas mismas
+   (`request.env.user._is_public()`), devolviendo `401` con el sobre propio.
+   Usar `auth="user"` daría un `303` al login de Odoo, que axios sigue en
+   silencio y termina entregándole HTML al interceptor de `src/lib/http.ts`.
+4. CSRF: `csrf=False` en las rutas propias + **header obligatorio
+   `X-Requested-With: anitrack` en todo método que no sea GET/HEAD**; sin él,
+   `403 FORBIDDEN`. Un atacante cross-site no puede fijar un header propio sin
+   un preflight CORS, y no emitimos cabeceras CORS (ADR-005, topología 1:
+   mismo origen por proxy), así que el preflight falla. Es la defensa "custom
+   request header" de OWASP, con `SameSite=Lax` como segunda capa.
+
+**Alternativa considerada y descartada por ahora.** Reutilizar el HMAC de Odoo
+(`request.csrf_token()` / `request.validate_csrf()`) transportado en un header
+`X-CSRF-Token`, sembrado por `/auth/login` y `/auth/me`. Es criptográficamente
+más fuerte, pero suma ciclo de vida del token en el frontend (refresco,
+reintento ante un 403 por token vencido) para un beneficio que hoy no se
+cobra. **Disparador explícito para adoptarla:** si alguna vez se habilita CORS
+—topologías 2 o 3 de ADR-005, subdominios o dominios sin relación— la defensa
+por header pierde fuerza, porque habría un preflight permitido; ahí el token
+pasa a ser obligatorio y este ADR se revisa.
+
+**Consecuencias.** Positiva: el contrato del doc 04 se cumple al pie de la
+letra con códigos HTTP reales, y el frontend ya escrito no cambia nada
+(`src/features/auth/services/auth.service.ts` y `src/lib/http.ts` ya hablan
+ese contrato); la cookie queda con atributos explícitos y auditables en un
+archivo propio. Negativa: el bloque de auth queda acoplado a APIs internas de
+Odoo (`request.session.authenticate`, `session.logout`) que pueden cambiar
+entre versiones mayores — acotado a un archivo y cubierto por un test de humo.
+Segunda negativa: el header obligatorio hay que agregarlo a la instancia de
+axios (una línea en `createHttpClient`) y recordarlo al llamar la API desde
+fuera del frontend (curl, Postman) — por eso el mensaje del `403` dice
+exactamente qué header falta.
+
+---
+
+## ADR-017 — El Sprint 3a se construye contra MSW; el backend de auth y listas va en un carril paralelo, con spike al inicio y checkpoint de contrato al cierre
+
+**Contexto.** ADR-001 fijó "MSW hasta que el backend real esté confirmado". El
+Sprint 2 cambió el terreno: existe un controlador REST propio en `ll-odoo`
+(ADR-010/011) y la política sobre ese repo pasó a permitir modificarlo en
+local. Corresponde decidir explícitamente qué hace el Sprint 3a.
+
+Verificado: `src/mocks/handlers.ts` ya implementa el **100%** del bloque de
+auth y listas del doc 04 —login, logout, me, register, CRUD de checklists,
+entries, links, library-index— con seed de dos usuarios (uno poblado y anidado,
+uno vacío). El frontend del Sprint 3a **no está bloqueado ni un día**.
+
+Pero hay una asimetría con el Sprint 2 que no conviene ignorar: el catálogo era
+público y de solo lectura, así que MSW y el backend real solo podían diferir en
+la forma del payload, y los esquemas Zod lo detectaban. Auth y listas agregan
+riesgo que MSW **no puede** simular: la cookie, el CSRF, las ACL y la propiedad
+de los datos. Ese riesgo no se abarata por esperar.
+
+**Alternativas consideradas.**
+
+1. 3a 100% contra MSW y backend entero en el Sprint 4 (tarea 4.1). Descartada:
+   concentra el riesgo de cookie/CSRF/ACL justo cuando ya no hay margen, y el
+   Sprint 3b construye el wizard sobre `POST /me/links`, cuyo caso
+   `ALREADY_LINKED` depende de la decisión de aislamiento de ADR-014 — cara de
+   descubrir tarde.
+2. Escribir el backend primero y construir 3a contra Odoo real. Descartada:
+   rompe ADR-001 sin necesidad, hace que un bug de Python bloquee la UI, y
+   regala el mejor activo del proyecto (poder construir la UI sin backend).
+3. **[Elegida]** Dos carriles. **Carril A (camino crítico): el frontend del
+   Sprint 3a se construye íntegramente contra MSW**, como hasta ahora.
+   **Carril B (backend):** un spike corto **al principio** del sprint que
+   implementa solo `/auth/login`, `/auth/logout`, `/auth/me` y las reglas de
+   ADR-014, verificado con `curl` y sin tocar el frontend; el resto de
+   endpoints (`/me/*`) al final; y un **checkpoint de contrato** de cierre que
+   corre los mismos esquemas Zod del frontend contra las respuestas reales,
+   igual que el spike 2.8.
+
+**Decisión.** Opción 3. `VITE_API_MODE` sigue en `mock` por default y ninguna
+tarea del carril A depende del carril B.
+
+**Consecuencias.** Positiva: el riesgo de sesión/ACL se descubre en la primera
+semana del sprint, con margen para reaccionar, sin que el frontend dependa de
+eso; y la tarea 4.1 pasa de "escribir toda la integración" a "encender el flag
+y arreglar el drift". Negativa: hay que sostener dos implementaciones del mismo
+contrato (MSW y Python) durante el sprint, y pueden divergir en silencio —
+mitigado por el checkpoint de contrato con esquemas Zod, que es **obligatorio**
+para dar el sprint por cerrado. Tercera consecuencia: el Odoo local tiene
+catálogo sembrado pero **cero listas de usuario**, así que extender
+`scripts/seed-odoo.mjs` con un usuario portal y sus listas deja de ser
+opcional y entra al plan como tarea del carril B.
