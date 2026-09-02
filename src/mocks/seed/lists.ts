@@ -19,6 +19,17 @@ export const users: UserSession[] = [
   },
 ]
 
+/**
+ * Contraseñas mock para el flujo de login (nunca forman parte del dominio:
+ * `UserSession` no tiene password, ver ADR-005). Vive acá, junto a `users`,
+ * en vez de en un archivo `auth` separado, porque MSW necesita ambas listas
+ * sincronizadas por email — `POST /auth/register` agrega a las dos.
+ */
+export const mockCredentials: Record<string, string> = {
+  'alex@example.com': 'password123',
+  'sam@example.com': 'password123',
+}
+
 /** Árbol de checklists por usuario (solo carpetas del usuario, doc 04). */
 export const checklistsByUser: Record<number, ChecklistNode[]> = {
   1: [

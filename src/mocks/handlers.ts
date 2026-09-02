@@ -5,8 +5,10 @@ import type { ChecklistNode, ListEntry } from '@/features/lists/types'
 import { genres, platforms, companies } from '@/mocks/seed/masters'
 import { franchises, allContents } from '@/mocks/seed/franchises'
 import { filterFranchises, searchHits } from '@/mocks/seed/derive'
+import type { UserSession } from '@/features/auth/types'
 import {
   users,
+  mockCredentials,
   checklistsByUser,
   entriesByChecklist,
   libraryIndexByUser,
@@ -149,10 +151,15 @@ export const handlers = [
   // ---- Auth ----
   http.post(url('/auth/login'), async ({ request }) => {
     await delay(300)
+    const err = injectedError(request)
+    if (err) return err
     const body = (await request.json()) as { login?: string; password?: string }
-    const user = users.find((u) => u.email === body.login) ?? users[0]!
-    if (!body.password) {
-      return errorResponse('UNAUTHORIZED', 'Invalid credentials')
+    const user = users.find((u) => u.email === body.login)
+    const validPassword = !!user && mockCredentials[user.email] === body.password
+    // Mensaje genérico a propósito (doc 12 §5, 3.2): no le regalamos a nadie
+    // si el email existe o no.
+    if (!user || !validPassword) {
+      return errorResponse('UNAUTHORIZED', 'Invalid email or password')
     }
     currentUserId = user.id
     return HttpResponse.json({ user })
@@ -174,14 +181,29 @@ export const handlers = [
 
   http.post(url('/auth/register'), async ({ request }) => {
     await delay(300)
-    const body = (await request.json()) as { name?: string; email?: string }
-    const user = {
-      id: 99,
-      odooUserId: 99,
-      name: body.name ?? 'New User',
-      email: body.email ?? 'new@example.com',
+    const err = injectedError(request)
+    if (err) return err
+    const body = (await request.json()) as {
+      name?: string
+      email?: string
+      password?: string
+    }
+    if (!body.name || !body.email || !body.password) {
+      return errorResponse('VALIDATION', 'Name, email and password are required')
+    }
+    if (users.some((u) => u.email === body.email)) {
+      return errorResponse('VALIDATION', 'Email is already registered', {
+        field: 'email',
+      })
+    }
+    const user: UserSession = {
+      id: Date.now(),
+      odooUserId: Date.now(),
+      name: body.name,
+      email: body.email,
       avatarUrl: null,
     }
+    mockCredentials[user.email] = body.password
     currentUserId = user.id
     users.push(user)
     return HttpResponse.json({ user }, { status: 201 })
