@@ -107,6 +107,37 @@ export const en = {
       hide: 'Hide gallery',
     },
   },
+  auth: {
+    emailLabel: 'Email',
+    passwordLabel: 'Password',
+    nameLabel: 'Name',
+    login: {
+      title: 'Log in',
+      subtitle: 'Welcome back. Enter your details to continue.',
+      submit: 'Log in',
+      submitting: 'Logging in…',
+      noAccount: "Don't have an account?",
+      registerLink: 'Sign up',
+    },
+    register: {
+      title: 'Create your account',
+      subtitle: 'Track everything you watch and play.',
+      submit: 'Create account',
+      submitting: 'Creating account…',
+      haveAccount: 'Already have an account?',
+      loginLink: 'Log in',
+    },
+    errors: {
+      emailRequired: 'Email is required',
+      emailInvalid: 'Enter a valid email address',
+      passwordRequired: 'Password is required',
+      passwordTooShort: 'Password must be at least 8 characters',
+      nameRequired: 'Name is required',
+      invalidCredentials: 'Invalid email or password',
+      registrationUnavailable:
+        'Registration is currently unavailable. Please try again later.',
+    },
+  },
   search: {
     inputLabel: 'Search franchises and titles',
     placeholder: 'Search…',
