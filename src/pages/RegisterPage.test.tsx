@@ -119,4 +119,22 @@ describe('RegisterPage', () => {
       screen.getByRole('button', { name: t.common.retry }),
     ).toBeInTheDocument()
   })
+
+  it('201 con forma inesperada (drift de contrato): también reemplaza el form por un ErrorState, no se queda mudo', async () => {
+    // Mismo caso que en LoginPage: `userEnvelopeSchema.parse` lanza ZodError
+    // ante una respuesta 2xx con forma distinta, y eso no es un ApiError.
+    server.use(
+      http.post('/api/v1/auth/register', () =>
+        HttpResponse.json({ usuario: { id: 1 } }, { status: 201 }),
+      ),
+    )
+    const user = userEvent.setup()
+    renderRegister()
+    await fillValidForm(user)
+
+    await user.click(screen.getByRole('button', { name: t.auth.register.submit }))
+
+    expect(await screen.findByText(t.states.errorTitle)).toBeInTheDocument()
+    expect(useSessionStore.getState().status).not.toBe('authenticated')
+  })
 })

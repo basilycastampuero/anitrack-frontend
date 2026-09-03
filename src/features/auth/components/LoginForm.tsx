@@ -45,7 +45,12 @@ interface LoginFormProps {
 export function LoginForm({ next }: LoginFormProps) {
   const navigate = useNavigate()
   const login = useLogin()
-  const [fatalError, setFatalError] = useState<ApiError | null>(null)
+  // `ErrorState` no usa el valor del error, solo dispara el retry — así que
+  // no hace falta guardar el `ApiError`. Importa porque un `ZodError` (200
+  // con forma inesperada, ver `auth.service.ts`) no es un `ApiError`: si
+  // este flag dependiera de `instanceof ApiError` para decidir "hay error",
+  // ese caso caería silenciosamente a "no hay error" (#2 de la revisión).
+  const [fatalError, setFatalError] = useState(false)
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginFormSchema),
@@ -53,7 +58,7 @@ export function LoginForm({ next }: LoginFormProps) {
   })
 
   function onSubmit(values: LoginFormValues) {
-    setFatalError(null)
+    setFatalError(false)
     login.mutate(values, {
       onSuccess: () => navigate(next, { replace: true }),
       onError: (error) => {
@@ -61,13 +66,16 @@ export function LoginForm({ next }: LoginFormProps) {
           form.setError('root', { message: t.auth.errors.invalidCredentials })
           return
         }
-        setFatalError(error instanceof ApiError ? error : null)
+        // Cualquier otra cosa (ApiError no-UNAUTHORIZED, ZodError por drift de
+        // contrato, error de red) es "no sabemos qué pasó": nunca se trata
+        // como éxito.
+        setFatalError(true)
       },
     })
   }
 
   if (fatalError) {
-    return <ErrorState onRetry={() => setFatalError(null)} />
+    return <ErrorState onRetry={() => setFatalError(false)} />
   }
 
   return (

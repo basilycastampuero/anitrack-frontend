@@ -79,6 +79,37 @@ function requireUser(): number | null {
   return currentUserId
 }
 
+/**
+ * `checklistsByUser` es un árbol (doc 04: `children` anida sub-carpetas), no
+ * una lista plana. Buscar/borrar solo en el nivel superior deja fuera
+ * cualquier nodo anidado (p. ej. el seed tiene "All-time" bajo "Favorites",
+ * ver `mocks/seed/lists.ts`) — estos dos helpers recorren el árbol completo,
+ * los usan PATCH, DELETE y POST (para `parentId`).
+ */
+function findChecklistNode(nodes: ChecklistNode[], id: number): ChecklistNode | null {
+  for (const node of nodes) {
+    if (node.id === id) return node
+    const found = findChecklistNode(node.children, id)
+    if (found) return found
+  }
+  return null
+}
+
+/** Quita el nodo `id` de donde esté en el árbol (in-place). `true` si lo encontró. */
+function removeChecklistNode(nodes: ChecklistNode[], id: number): boolean {
+  const index = nodes.findIndex((n) => n.id === id)
+  if (index !== -1) {
+    nodes.splice(index, 1)
+    return true
+  }
+  return nodes.some((n) => removeChecklistNode(n.children, id))
+}
+
+/** El propio id de `node` más el de todos sus descendientes (recursivo). */
+function collectSubtreeIds(node: ChecklistNode): number[] {
+  return [node.id, ...node.children.flatMap(collectSubtreeIds)]
+}
+
 export const handlers = [
   // ---- Master data ----
   http.get(url('/genres'), async ({ request }) => {
@@ -220,39 +251,66 @@ export const handlers = [
 
   http.post(url('/me/checklists'), async ({ request }) => {
     await delay(300)
-    const id = requireUser()
-    if (!id) return errorResponse('UNAUTHORIZED', 'Login required')
-    const body = (await request.json()) as Partial<ChecklistNode>
+    const err = injectedError(request)
+    if (err) return err
+    const uid = requireUser()
+    if (!uid) return errorResponse('UNAUTHORIZED', 'Login required')
+    const body = (await request.json()) as Partial<ChecklistNode> & { parentId?: number }
+    const roots = checklistsByUser[uid] ?? []
+    const parent = body.parentId ? findChecklistNode(roots, body.parentId) : null
+    if (body.parentId && !parent) {
+      return errorResponse('NOT_FOUND', 'Parent checklist not found')
+    }
+    const siblings = parent ? parent.children : roots
     const checklist: ChecklistNode = {
       id: Date.now(),
       name: body.name ?? 'New list',
       description: body.description ?? null,
       imageUrl: null,
-      order: (checklistsByUser[id]?.length ?? 0) + 1,
+      order: siblings.length,
       sortingMode: body.sortingMode ?? 'C',
       isPublished: body.isPublished ?? false,
       children: [],
       linkCount: 0,
     }
-    checklistsByUser[id] = [...(checklistsByUser[id] ?? []), checklist]
+    if (parent) {
+      parent.children = [...parent.children, checklist]
+    } else {
+      checklistsByUser[uid] = [...roots, checklist]
+    }
     return HttpResponse.json({ checklist }, { status: 201 })
   }),
 
   http.patch(url('/me/checklists/:id'), async ({ request, params }) => {
     await delay(200)
+    const err = injectedError(request)
+    if (err) return err
     const uid = requireUser()
     if (!uid) return errorResponse('UNAUTHORIZED', 'Login required')
-    const list = (checklistsByUser[uid] ?? []).find(
-      (c) => c.id === Number(params.id),
-    )
+    const list = findChecklistNode(checklistsByUser[uid] ?? [], Number(params.id))
     if (!list) return errorResponse('NOT_FOUND', 'Checklist not found')
     Object.assign(list, await request.json())
     return HttpResponse.json({ checklist: list })
   }),
 
-  http.delete(url('/me/checklists/:id'), async () => {
+  http.delete(url('/me/checklists/:id'), async ({ request, params }) => {
     await delay(200)
-    if (!requireUser()) return errorResponse('UNAUTHORIZED', 'Login required')
+    const err = injectedError(request)
+    if (err) return err
+    const uid = requireUser()
+    if (!uid) return errorResponse('UNAUTHORIZED', 'Login required')
+    const id = Number(params.id)
+    // El backend real cascadea sub-carpetas y links (`ondelete='cascade'`,
+    // ver useDeleteChecklist.ts): hay que borrar los entries de TODO el
+    // subárbol, no solo los del nodo apuntado, o quedan huérfanos accesibles
+    // por un id de checklist que ya no existe (#5 de la revisión).
+    const node = findChecklistNode(checklistsByUser[uid] ?? [], id)
+    const removed = removeChecklistNode(checklistsByUser[uid] ?? [], id)
+    if (!removed) return errorResponse('NOT_FOUND', 'Checklist not found')
+    const idsToClean = node ? collectSubtreeIds(node) : [id]
+    for (const cleanId of idsToClean) {
+      delete entriesByChecklist[cleanId]
+    }
     return new HttpResponse(null, { status: 204 })
   }),
 

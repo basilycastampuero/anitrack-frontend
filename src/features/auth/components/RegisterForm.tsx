@@ -57,7 +57,10 @@ interface RegisterFormProps {
 export function RegisterForm({ next }: RegisterFormProps) {
   const navigate = useNavigate()
   const register = useRegister()
-  const [fatalError, setFatalError] = useState<ApiError | null>(null)
+  // Ver LoginForm: `ErrorState` no usa el valor del error, y un `ZodError`
+  // (200 con forma inesperada) no es `ApiError` — lo desconocido nunca debe
+  // leerse como "no hay error" (#2 de la revisión).
+  const [fatalError, setFatalError] = useState(false)
 
   const form = useForm<RegisterFormValues>({
     resolver: zodResolver(registerFormSchema),
@@ -65,35 +68,37 @@ export function RegisterForm({ next }: RegisterFormProps) {
   })
 
   function onSubmit(values: RegisterFormValues) {
-    setFatalError(null)
+    setFatalError(false)
     register.mutate(values, {
       onSuccess: () => navigate(next, { replace: true }),
       onError: (error) => {
-        if (!(error instanceof ApiError)) {
-          setFatalError(null)
-          return
+        // Solo los casos de ApiError conocidos y manejables se resuelven como
+        // error de formulario. Todo lo demás (ApiError no reconocido,
+        // ZodError por drift de contrato, error de red) cae al fatal error:
+        // lo desconocido nunca se trata como éxito.
+        if (error instanceof ApiError) {
+          if (error.code === 'VALIDATION' && error.field && isRegisterField(error.field)) {
+            form.setError(error.field, { message: error.message })
+            return
+          }
+          if (error.code === 'VALIDATION') {
+            form.setError('root', { message: error.message })
+            return
+          }
+          if (error.code === 'FORBIDDEN') {
+            form.setError('root', {
+              message: t.auth.errors.registrationUnavailable,
+            })
+            return
+          }
         }
-        if (error.code === 'VALIDATION' && error.field && isRegisterField(error.field)) {
-          form.setError(error.field, { message: error.message })
-          return
-        }
-        if (error.code === 'VALIDATION') {
-          form.setError('root', { message: error.message })
-          return
-        }
-        if (error.code === 'FORBIDDEN') {
-          form.setError('root', {
-            message: t.auth.errors.registrationUnavailable,
-          })
-          return
-        }
-        setFatalError(error)
+        setFatalError(true)
       },
     })
   }
 
   if (fatalError) {
-    return <ErrorState onRetry={() => setFatalError(null)} />
+    return <ErrorState onRetry={() => setFatalError(false)} />
   }
 
   return (

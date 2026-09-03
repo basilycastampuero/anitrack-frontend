@@ -9,7 +9,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { RegisterForm } from '@/features/auth/components/RegisterForm'
-import { paths } from '@/router/paths'
+import { paths, safeNext } from '@/router/paths'
 import { t } from '@/i18n/en'
 
 /**
@@ -18,7 +18,7 @@ import { t } from '@/i18n/en'
  */
 export default function RegisterPage() {
   const [searchParams] = useSearchParams()
-  const next = searchParams.get('next') || paths.home
+  const next = safeNext(searchParams.get('next'))
 
   return (
     <PageWrapper className="flex justify-center py-12">
