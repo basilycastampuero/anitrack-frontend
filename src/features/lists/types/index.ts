@@ -44,6 +44,25 @@ export interface ListEntry {
   finishedAt?: string | null
 }
 
+/** Body de `POST /me/checklists` (doc 04). El dueño nunca viaja acá: lo pone
+ * el backend a partir de la sesión (ADR-015, mismo criterio que auth). */
+export interface CreateChecklistRequest {
+  name: string
+  description?: string
+  parentId?: number
+  isPublished?: boolean
+}
+
+/** Body parcial de `PATCH /me/checklists/:id` (doc 04). */
+export interface UpdateChecklistRequest {
+  name?: string
+  description?: string | null
+  parentId?: number
+  order?: number
+  sortingMode?: 'C' | 'N'
+  isPublished?: boolean
+}
+
 export interface CreateLinkRequest {
   checklistId: number
   versionId: number
