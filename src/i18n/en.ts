@@ -137,6 +137,29 @@ export const en = {
       registrationUnavailable:
         'Registration is currently unavailable. Please try again later.',
     },
+    oauth: {
+      orDivider: 'or',
+      twitch: 'Continue with Twitch',
+      disabledInMock:
+        "Social login isn't available in mock mode — it needs the real backend.",
+    },
+    callback: {
+      loadingTitle: 'Signing you in…',
+      errorTitle: 'Sign-in failed',
+      accessDenied: 'You cancelled the sign-in request.',
+      genericError: 'Something went wrong finishing sign-in. Please try again.',
+      backToLogin: 'Back to log in',
+    },
+  },
+  lists: {
+    title: 'My Lists',
+    treeLabel: 'Your checklists',
+    treeEmptyTitle: 'No lists yet',
+    treeEmptyBody: 'Lists you create will show up here.',
+    selectPromptTitle: 'Select a list',
+    selectPromptBody: 'Choose a list on the left to see what is in it.',
+    entriesEmptyTitle: 'This list is empty',
+    entriesEmptyBody: 'Nothing has been added to this list yet.',
   },
   search: {
     inputLabel: 'Search franchises and titles',
