@@ -1,5 +1,31 @@
 import type { ChecklistNode, UpdateChecklistRequest } from '@/features/lists/types'
 
+/** Cuánto se lleva puesto borrar `node` (doc 12 §3.5b): sus sub-carpetas
+ * descendientes (sin contarse a sí mismo) y el total de entries — el propio
+ * `linkCount` del nodo más el de cada descendiente. `linkCount` ya viene
+ * acotado a los links propios de cada nodo (doc 04: excluye los hijos de un
+ * franchise-link), así que sumarlo recursivamente no cuenta nada dos veces.
+ * Pura y testeada aparte: el diálogo de borrado la usa para no ser un
+ * "¿seguro?" genérico. */
+export function countDescendants(node: ChecklistNode): {
+  listCount: number
+  entryCount: number
+} {
+  return node.children.reduce(
+    (acc, child) => {
+      const sub = countDescendants(child)
+      // `sub.entryCount` ya arranca en `child.linkCount` (es la base del
+      // acumulador de `countDescendants(child)`), así que sumarlo de nuevo
+      // acá contaría los links de `child` dos veces.
+      return {
+        listCount: acc.listCount + 1 + sub.listCount,
+        entryCount: acc.entryCount + sub.entryCount,
+      }
+    },
+    { listCount: 0, entryCount: node.linkCount },
+  )
+}
+
 /**
  * Aplica un patch parcial al nodo `id` en cualquier nivel del árbol, sin
  * mutar el original (doc 12 §5, 3.4: `useUpdateChecklist` optimistic

@@ -1,5 +1,7 @@
+import { useRef, useState } from 'react'
 import { ChevronRight, Folder } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { ChecklistNodeActions } from '@/features/lists/components/ChecklistNodeActions'
 import type { ChecklistNode } from '@/features/lists/types'
 
 interface ChecklistTreeItemProps {
@@ -40,16 +42,39 @@ export function ChecklistTreeItem({
   const selected = node.id === selectedId
   const focused = node.id === focusedId
 
+  // Ref propia además de `registerRef` (que alimenta el mapa de roving
+  // tabindex de `useTreeNavigation`): el menú contextual necesita devolver el
+  // foco de DOM a ESTE `<li>` puntual al cerrarse, y ese mapa vive fuera del
+  // componente — más simple tener la referencia acá que ir a buscarla.
+  const liRef = useRef<HTMLLIElement | null>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
+
   return (
     <li
-      ref={registerRef(node.id)}
+      ref={(el) => {
+        liRef.current = el
+        registerRef(node.id)(el)
+      }}
       role="treeitem"
       aria-label={node.name}
       aria-level={level}
       aria-selected={selected}
       aria-expanded={hasChildren ? expanded : undefined}
       tabIndex={focused ? 0 : -1}
-      onKeyDown={(e) => onKeyDown(e, node.id)}
+      onKeyDown={(e) => {
+        // Patrón ARIA APG "Actions in treeitems": Shift+F10 y la tecla Menú
+        // abren el menú contextual del nodo con foco, sin robarle la tecla a
+        // la navegación del árbol (doc 12 §3.5b, riesgo #2) — por eso el
+        // corte pasa ACÁ, antes de delegar a `onKeyDown` (que además tiene su
+        // propio `stopPropagation` para el bug de burbujeo entre niveles).
+        if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+          e.preventDefault()
+          e.stopPropagation()
+          setMenuOpen(true)
+          return
+        }
+        onKeyDown(e, node.id)
+      }}
       onClick={(e) => {
         e.stopPropagation()
         onSelect(node.id)
@@ -58,7 +83,7 @@ export function ChecklistTreeItem({
     >
       <div
         className={cn(
-          'flex items-center gap-1.5 rounded-md py-1.5 pr-2 text-sm',
+          'group flex items-center gap-1.5 rounded-md py-1.5 pr-2 text-sm',
           selected ? 'bg-accent font-medium text-accent-foreground' : 'text-foreground',
         )}
         style={{ paddingLeft: `${(level - 1) * 16 + 4}px` }}
@@ -86,6 +111,12 @@ export function ChecklistTreeItem({
         {node.linkCount > 0 && (
           <span className="shrink-0 text-xs text-muted-foreground">{node.linkCount}</span>
         )}
+        <ChecklistNodeActions
+          node={node}
+          open={menuOpen}
+          onOpenChange={setMenuOpen}
+          onClosed={() => liRef.current?.focus()}
+        />
       </div>
 
       {hasChildren && expanded && (

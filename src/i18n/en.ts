@@ -160,6 +160,51 @@ export const en = {
     selectPromptBody: 'Choose a list on the left to see what is in it.',
     entriesEmptyTitle: 'This list is empty',
     entriesEmptyBody: 'Nothing has been added to this list yet.',
+    newList: 'New list',
+    menu: {
+      trigger: (name: string) => `Actions for ${name}`,
+      rename: 'Rename',
+      newSubList: 'New sub-list',
+      publish: 'Publish',
+      unpublish: 'Unpublish',
+      delete: 'Delete',
+    },
+    form: {
+      createTitle: 'New list',
+      createSubtitle: 'Create a new folder to organize your entries.',
+      renameTitle: 'Rename list',
+      renameSubtitle: 'Change the name of this list.',
+      nameLabel: 'Name',
+      submitCreate: 'Create',
+      submitRename: 'Save',
+      submitting: 'Saving…',
+      cancel: 'Cancel',
+    },
+    deleteDialog: {
+      title: (name: string) => `Delete "${name}"?`,
+      body: (listCount: number, entryCount: number) => {
+        if (listCount === 0 && entryCount === 0) {
+          return 'This list is empty. This action cannot be undone.'
+        }
+        const parts: string[] = []
+        if (listCount > 0) {
+          parts.push(`${listCount} sub-list${listCount === 1 ? '' : 's'}`)
+        }
+        if (entryCount > 0) {
+          parts.push(`${entryCount} ${entryCount === 1 ? 'entry' : 'entries'}`)
+        }
+        return `This will also delete ${parts.join(' and ')}. This action cannot be undone.`
+      },
+      confirm: 'Delete',
+      confirming: 'Deleting…',
+      cancel: 'Cancel',
+    },
+    errors: {
+      nameRequired: 'Name is required',
+      saveFailed: 'Could not save the list. Try again.',
+      deleteFailed: 'Could not delete the list. Try again.',
+      publishFailed: 'Could not update the list. Try again.',
+    },
   },
   search: {
     inputLabel: 'Search franchises and titles',
