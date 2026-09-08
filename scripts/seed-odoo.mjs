@@ -353,6 +353,539 @@ const FRANCHISES = [
 ]
 
 /* ------------------------------------------------------------------ *
+ * Listas de usuario (espejo de src/mocks/seed/lists.ts, Sprint 3a — B2)
+ * ------------------------------------------------------------------ *
+ *
+ * Réplica del seed de MSW en el Odoo local: mismos dos usuarios
+ * (alex@example.com poblado, sam@example.com vacío), mismas credenciales
+ * (`password123`) y el mismo árbol de checklists, para que B3/B4 (endpoints
+ * `/me/*`) tengan datos reales contra los que verificar el contrato.
+ *
+ * Tres propiedades del modelo de Chano que esta sección respeta a propósito
+ * (doc 12 §4, ADR-018/019):
+ *
+ * 1. **Nunca se busca una checklist "sombra" (`checklist_database = true`)
+ *    por nombre.** `Link.compute_show_name` reescribe
+ *    `link_record_id.checklist_name` como efecto secundario apenas se crea
+ *    el link (le agrega el progreso, ej. "Spy x Family [S1 25/25]"), así que
+ *    una segunda corrida que buscara por el nombre original no la
+ *    encontraría y duplicaría todo. La identidad de una sombra es "la que
+ *    cuelga de este link"; se llega a ella leyendo `link.link_record_id`,
+ *    nunca buscándola de forma independiente.
+ * 2. **Dentro de cada link: primero se crea la sombra, después el link**
+ *    (`ensureFranchiseLink`/`ensureVersionLink` abajo), igual que
+ *    `wizard/link.py` hace con su `create()` anidado — acá son dos llamadas
+ *    RPC separadas y secuenciales en vez de una expresión anidada, pero el
+ *    orden es el mismo y el resultado final es idéntico.
+ * 3. **Un franchise-link agrupado y sus hijos comparten `link_checklist_id`**
+ *    (la carpeta del usuario), pero el `checklist_parent_id` de la sombra de
+ *    cada hijo apunta a la sombra del franchise-link, no a la carpeta. Son
+ *    dos jerarquías distintas que se solapan: la del usuario (carpetas) y la
+ *    de las sombras (solo para que Odoo pueda mostrar el franchise-link como
+ *    checklist "contenedora" en el backoffice).
+ *
+ * El árbol de Alex reproduce dos casos de verificación que exige el plan de
+ * B3: una rama de 4 niveles (Favorites > All-time > By decade > 2010s) y
+ * "Watching", que tiene 4 filas de `ll.checklist.link` (el version-link
+ * suelto + el franchise-link + sus 2 hijos) pero `linkCount` debe dar 2 (el
+ * franchise-link no cuenta a sus propios hijos) — el caso que detecta un
+ * doble conteo si el filtro `lv_link_franchise_id = false` de B3 está mal.
+ */
+
+const LISTS_SEED = [
+  {
+    login: 'alex@example.com',
+    password: 'password123',
+    name: 'Alex Rivera',
+    folders: [
+      {
+        name: 'Watching',
+        sortingMode: 'N',
+        isPublished: true,
+        entries: [
+          {
+            kind: 'version',
+            franchise: 'Demon Slayer',
+            content: 'Kimetsu no Yaiba',
+            version: 'Season 1 (JP)',
+            displayName: 'Demon Slayer — Season 1',
+            abbreviation: 'KnY',
+            watched: 12,
+          },
+          {
+            kind: 'franchise',
+            franchise: 'Spy x Family',
+            displayName: 'Spy x Family',
+            children: [
+              {
+                franchise: 'Spy x Family',
+                content: 'Spy x Family',
+                version: 'Season 1 (JP)',
+                displayName: 'Season 1',
+                abbreviation: 'S1',
+                watched: 25,
+              },
+              {
+                franchise: 'Spy x Family',
+                content: 'Spy x Family',
+                version: 'Season 2 (JP)',
+                displayName: 'Season 2',
+                abbreviation: 'S2',
+                watched: 3,
+              },
+            ],
+          },
+        ],
+      },
+      {
+        name: 'Completed',
+        sortingMode: 'N',
+        isPublished: true,
+        entries: [
+          {
+            kind: 'version',
+            franchise: 'Your Name',
+            content: 'Kimi no Na wa',
+            version: 'Movie',
+            displayName: 'Your Name',
+            abbreviation: null,
+            watched: 1,
+          },
+        ],
+      },
+      {
+        name: 'Favorites',
+        description: 'Curated picks',
+        sortingMode: 'C',
+        isPublished: false,
+        entries: [],
+        folders: [
+          {
+            name: 'All-time',
+            sortingMode: 'C',
+            isPublished: false,
+            entries: [
+              {
+                kind: 'version',
+                franchise: 'Fullmetal Alchemist',
+                content: 'Brotherhood',
+                version: 'Original Japanese',
+                displayName: 'Fullmetal Alchemist: Brotherhood',
+                abbreviation: 'FMAB',
+                watched: 64,
+              },
+            ],
+            folders: [
+              {
+                name: 'By decade',
+                sortingMode: 'C',
+                isPublished: false,
+                entries: [],
+                folders: [
+                  {
+                    name: '2010s',
+                    sortingMode: 'C',
+                    isPublished: false,
+                    entries: [
+                      {
+                        kind: 'version',
+                        franchise: 'Steins;Gate',
+                        content: 'Steins;Gate (Anime)',
+                        version: 'Original Japanese',
+                        displayName: 'Steins;Gate',
+                        abbreviation: 'SG',
+                        watched: 24,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    login: 'sam@example.com',
+    password: 'password123',
+    name: 'Sam Cortez',
+    folders: [],
+  },
+]
+
+/** Cache de referencias de catálogo resueltas (franquicia/content/version). */
+const catalogRefCache = new Map()
+
+async function resolveVersionRef(franchiseName, contentName, versionName) {
+  const key = `${franchiseName}::${contentName}::${versionName}`
+  if (catalogRefCache.has(key)) return catalogRefCache.get(key)
+
+  const franchiseIds = await findFranchiseIds(franchiseName)
+  if (!franchiseIds.length) {
+    throw new Error(
+      `seedLists: franquicia "${franchiseName}" no existe — corré primero el seed de catálogo`,
+    )
+  }
+  const franchiseId = franchiseIds[0]
+
+  const contentId = await findContentId(contentName, franchiseId)
+  if (!contentId) {
+    throw new Error(`seedLists: content "${contentName}" no existe en la franquicia "${franchiseName}"`)
+  }
+
+  const [content] = await execKw('ll.checklist.content', 'read', [[contentId]], {
+    fields: ['content_type'],
+  })
+  const versions = await searchRead(
+    'll.checklist.version',
+    [['version_content_id', '=', contentId], ['version_name', '=', versionName]],
+    ['id'],
+  )
+  if (!versions.length) {
+    throw new Error(`seedLists: version "${versionName}" no existe en el content "${contentName}"`)
+  }
+
+  const ref = {
+    franchiseId,
+    contentId,
+    versionId: versions[0].id,
+    contentType: content.content_type,
+  }
+  catalogRefCache.set(key, ref)
+  return ref
+}
+
+async function franchiseImageRefs(franchiseId) {
+  const [f] = await execKw('ll.checklist.franchise', 'read', [[franchiseId]], {
+    fields: ['franchise_image_group_id', 'franchise_image_id'],
+  })
+  return {
+    groupId: f.franchise_image_group_id ? f.franchise_image_group_id[0] : false,
+    imageId: f.franchise_image_id ? f.franchise_image_id[0] : false,
+  }
+}
+
+async function contentImageId(contentId) {
+  const [c] = await execKw('ll.checklist.content', 'read', [[contentId]], {
+    fields: ['content_image_id'],
+  })
+  return c.content_image_id ? c.content_image_id[0] : false
+}
+
+/** Alta idempotente de la cuenta portal. Usa `signup()`, el mismo método que
+ * `POST /api/v1/auth/register` (ADR-015), para que el usuario quede en el
+ * mismo grupo (Portal) que produciría un alta real. */
+async function ensureResUser({ login, name, password }) {
+  const found = await search('res.users', [['login', '=', login]], { limit: 1 })
+  if (found.length) return { id: found[0], created: false }
+
+  await execKw('res.users', 'signup', [{ login, email: login, name, password }])
+  const created = await search('res.users', [['login', '=', login]], { limit: 1 })
+  if (!created.length) {
+    throw new Error(`seedLists: signup() no creó el usuario "${login}"`)
+  }
+  return { id: created[0], created: true }
+}
+
+/** Idem con el perfil `ll.checklist.user`, reutilizando `extra_get_user`
+ * (el mismo get-or-create que ADR-015 fija como única vía de resolución). */
+async function ensureUserProfile(resUserId) {
+  const found = await search('ll.checklist.user', [['user_res_user_id', '=', resUserId]], {
+    limit: 1,
+  })
+  if (found.length) return found[0]
+
+  // extra_get_user(self, uid) no lleva @api.model: por RPC el primer elemento
+  // de `args` es siempre la lista de ids a la que se ata `self` (acá vacía,
+  // igual que `request.env["ll.checklist.user"]` en el controlador real es
+  // un recordset vacío), y recién el segundo es el `uid` real del método.
+  await execKw('ll.checklist.user', 'extra_get_user', [[], resUserId])
+  const created = await search('ll.checklist.user', [['user_res_user_id', '=', resUserId]], {
+    limit: 1,
+  })
+  if (!created.length) {
+    throw new Error(`seedLists: extra_get_user() no creó el perfil para res.users ${resUserId}`)
+  }
+  return created[0]
+}
+
+/** Carpeta real del usuario (`checklist_database = false`). A diferencia de
+ * las sombras, su nombre nunca lo reescribe `compute_show_name` (ese compute
+ * solo toca `link_record_id`), así que buscarla por nombre es seguro. */
+async function ensureChecklistFolder({ profileId, parentId, name, description, order, sortingMode, isPublished }) {
+  const domain = [
+    ['checklist_user_id', '=', profileId],
+    ['checklist_parent_id', '=', parentId || false],
+    ['checklist_name', '=', name],
+    ['checklist_database', '=', false],
+  ]
+  const found = await search('ll.checklist.checklist', domain, { limit: 1 })
+  if (found.length) return { id: found[0], created: false }
+
+  const id = await create('ll.checklist.checklist', {
+    checklist_user_id: profileId,
+    checklist_parent_id: parentId || false,
+    checklist_name: name,
+    checklist_description: description || false,
+    checklist_order: order,
+    checklist_sorting_mode: sortingMode,
+    checklist_published: isPublished,
+    checklist_shared: true,
+    checklist_type: 'S',
+    checklist_database: false,
+  })
+  return { id, created: true }
+}
+
+/** Franchise-link agrupado (`link_version_id = false`). Identidad estructural:
+ * (carpeta, franquicia, tipo de contenido, sin versión) — nunca por nombre,
+ * ver nota 1 del bloque. Devuelve también `shadowId` porque los hijos
+ * agrupados necesitan la sombra del franchise-link como `checklist_parent_id`. */
+async function ensureFranchiseLink({ checklistId, profileId, franchiseId, contentType, displayName, order, franchiseImages }) {
+  const domain = [
+    ['link_checklist_id', '=', checklistId],
+    ['link_franchise_id', '=', franchiseId],
+    ['link_content_type', '=', contentType],
+    ['link_version_id', '=', false],
+  ]
+  const existing = await search('ll.checklist.link', domain, { limit: 1 })
+  if (existing.length) {
+    const [row] = await execKw('ll.checklist.link', 'read', [existing], { fields: ['link_record_id'] })
+    return { id: existing[0], shadowId: row.link_record_id[0], created: false }
+  }
+
+  // Primero la sombra (nota 2 del bloque), después el link.
+  const shadowId = await create('ll.checklist.checklist', {
+    checklist_user_id: profileId,
+    checklist_order: order,
+    checklist_name: displayName,
+    checklist_published: true,
+    checklist_shared: true,
+    checklist_image_group_id: franchiseImages.groupId,
+    checklist_image_id: franchiseImages.imageId,
+    checklist_type: 'S',
+    checklist_parent_id: checklistId,
+    checklist_database: true,
+  })
+  const linkId = await create('ll.checklist.link', {
+    link_checklist_id: checklistId,
+    link_franchise_id: franchiseId,
+    link_content_type: contentType,
+    link_name: displayName,
+    link_record_id: shadowId,
+  })
+  return { id: linkId, shadowId, created: true }
+}
+
+/** Version-link, suelto o agrupado bajo un franchise-link. Identidad
+ * estructural: (carpeta, versión) — igual criterio que el franchise-link. */
+async function ensureVersionLink({
+  checklistId, profileId, franchiseId, contentType, versionId,
+  displayName, abbreviation, watched, order,
+  franchiseLinkId, shadowParentId, franchiseImages, contentImage,
+}) {
+  const domain = [
+    ['link_checklist_id', '=', checklistId],
+    ['link_version_id', '=', versionId],
+  ]
+  const existing = await search('ll.checklist.link', domain, { limit: 1 })
+  if (existing.length) return { id: existing[0], created: false }
+
+  // Primero la sombra (nota 2 del bloque), después el link.
+  const shadowId = await create('ll.checklist.checklist', {
+    checklist_user_id: profileId,
+    checklist_order: order,
+    checklist_name: displayName,
+    checklist_published: true,
+    checklist_shared: true,
+    checklist_image_group_id: franchiseImages.groupId,
+    checklist_image_id: contentImage,
+    checklist_type: 'R',
+    checklist_parent_id: shadowParentId,
+    checklist_database: true,
+  })
+  const linkId = await create('ll.checklist.link', {
+    link_checklist_id: checklistId,
+    link_franchise_id: franchiseId,
+    link_content_type: contentType,
+    link_version_id: versionId,
+    link_name: displayName,
+    link_record_id: shadowId,
+    lv_abbreviation: abbreviation || false,
+    lv_episodes: watched || 0,
+    lv_link_franchise_id: franchiseLinkId || false,
+  })
+  return { id: linkId, created: true }
+}
+
+async function seedVersionEntry(e, ctx, order, depth) {
+  const ref = await resolveVersionRef(e.franchise, e.content, e.version)
+  const franchiseImages = await franchiseImageRefs(ref.franchiseId)
+  const contentImage = await contentImageId(ref.contentId)
+
+  const grouped = Boolean(ctx.franchiseLinkId)
+  const link = await ensureVersionLink({
+    checklistId: ctx.checklistId,
+    profileId: ctx.profileId,
+    franchiseId: ref.franchiseId,
+    contentType: ref.contentType,
+    versionId: ref.versionId,
+    displayName: e.displayName,
+    abbreviation: e.abbreviation,
+    watched: e.watched,
+    order,
+    franchiseLinkId: ctx.franchiseLinkId || false,
+    // Sin agrupar: la sombra cuelga de la carpeta. Agrupado: cuelga de la
+    // sombra del franchise-link (nota 3 del bloque).
+    shadowParentId: grouped ? ctx.shadowParentId : ctx.checklistId,
+    franchiseImages,
+    contentImage,
+  })
+  log(`${'  '.repeat(depth + 3)}${link.created ? '+' : '='} version-link ${e.displayName} (id ${link.id})`)
+}
+
+async function seedFranchiseGroup(e, ctx, order, depth) {
+  const franchiseIds = await findFranchiseIds(e.franchise)
+  if (!franchiseIds.length) {
+    throw new Error(`seedLists: franquicia "${e.franchise}" no existe — corré primero el seed de catálogo`)
+  }
+  const franchiseId = franchiseIds[0]
+  // El content_type del franchise-link sale del primer hijo agrupado, igual
+  // que en el wizard (wl_content_id.content_type de la primera versión).
+  const firstChildRef = await resolveVersionRef(e.children[0].franchise, e.children[0].content, e.children[0].version)
+  const franchiseImages = await franchiseImageRefs(franchiseId)
+
+  const franchiseLink = await ensureFranchiseLink({
+    checklistId: ctx.checklistId,
+    profileId: ctx.profileId,
+    franchiseId,
+    contentType: firstChildRef.contentType,
+    displayName: e.displayName,
+    order,
+    franchiseImages,
+  })
+  log(`${'  '.repeat(depth + 3)}${franchiseLink.created ? '+' : '='} franchise-link ${e.displayName} (id ${franchiseLink.id})`)
+
+  let childOrder = 0
+  for (const child of e.children) {
+    await seedVersionEntry(
+      child,
+      { profileId: ctx.profileId, checklistId: ctx.checklistId, franchiseLinkId: franchiseLink.id, shadowParentId: franchiseLink.shadowId },
+      childOrder,
+      depth + 1,
+    )
+    childOrder++
+  }
+}
+
+async function seedFolders(folders, ctx, depth) {
+  let order = 0
+  for (const f of folders) {
+    const folder = await ensureChecklistFolder({
+      profileId: ctx.profileId,
+      parentId: ctx.parentId || false,
+      name: f.name,
+      description: f.description,
+      order,
+      sortingMode: f.sortingMode ?? 'C',
+      isPublished: Boolean(f.isPublished),
+    })
+    log(`${'  '.repeat(depth + 2)}${folder.created ? '+' : '='} checklist ${f.name} (id ${folder.id})`)
+    order++
+
+    let entryOrder = 0
+    for (const e of f.entries ?? []) {
+      if (e.kind === 'franchise') {
+        await seedFranchiseGroup(e, { profileId: ctx.profileId, checklistId: folder.id }, entryOrder, depth)
+      } else {
+        await seedVersionEntry(e, { profileId: ctx.profileId, checklistId: folder.id, franchiseLinkId: false }, entryOrder, depth)
+      }
+      entryOrder++
+    }
+
+    if (f.folders?.length) {
+      await seedFolders(f.folders, { profileId: ctx.profileId, parentId: folder.id }, depth + 1)
+    }
+  }
+}
+
+async function seedLists() {
+  log('\n── Listas de usuario (espejo de src/mocks/seed/lists.ts) ──')
+  for (const u of LISTS_SEED) {
+    log(`\n  usuario ${u.login}`)
+    const userRes = await ensureResUser(u)
+    log(`    ${mark(userRes)} res.users (uid ${userRes.id})`)
+    const profileId = await ensureUserProfile(userRes.id)
+    await seedFolders(u.folders, { profileId, parentId: false }, 0)
+  }
+}
+
+/**
+ * Deshace `seedLists()`. Borra el PERFIL (`ll.checklist.user`) de cada
+ * usuario del seed, nunca las checklists directamente: `checklist_user_id`
+ * es `ondelete="cascade"` sobre `ll.checklist.user`, así que borrar el
+ * perfil se lleva puestas todas sus checklists (carpetas y sombras, todas
+ * tienen `checklist_user_id` seteado, no solo las raíz) y, en cascada desde
+ * ahí, sus links (`link_checklist_id` también `cascade`). Tiene que correr
+ * ANTES de `resetCatalog()`: `link_franchise_id` es `ondelete="restrict"`,
+ * así que mientras existan estos links, borrar las franquicias del seed de
+ * catálogo falla.
+ */
+async function resetLists() {
+  log('\n── --reset: borrando listas de usuario ──')
+  for (const u of LISTS_SEED) {
+    const userIds = await search('res.users', [['login', '=', u.login]])
+    if (!userIds.length) continue
+    const resUserId = userIds[0]
+
+    const profileIds = await search('ll.checklist.user', [['user_res_user_id', '=', resUserId]])
+    if (profileIds.length) {
+      await unlink('ll.checklist.user', profileIds)
+      log(`  - perfil de ${u.login} (id ${profileIds.join(', ')}) y sus listas`)
+    }
+
+    await unlink('res.users', [resUserId])
+    log(`  - res.users ${u.login} (id ${resUserId})`)
+  }
+
+  // Barrido de perfiles huérfanos: user_res_user_id es ondelete="set null"
+  // (no cascade), así que un perfil cuyo res.users se borró sin pasar antes
+  // por acá quedaría vivo apuntando a nadie. Mismo patrón que el barrido de
+  // imágenes huérfanas de resetCatalog().
+  const orphanProfiles = await search('ll.checklist.user', [['user_res_user_id', '=', false]])
+  if (orphanProfiles.length) {
+    await unlink('ll.checklist.user', orphanProfiles)
+    log(`  - ${orphanProfiles.length} perfiles huérfanos (sin res.users)`)
+  }
+}
+
+/**
+ * Guarda de red antes de borrar el catálogo: `link_franchise_id` es
+ * `ondelete="restrict"`, así que si queda VIVO un solo `ll.checklist.link`
+ * apuntando a una franquicia del seed —de un usuario que `resetLists()` no
+ * conoce, o de una corrida rota anterior— `resetCatalog()` moriría con el
+ * mensaje genérico de Odoo ("no se puede eliminar (...) referenciado")
+ * sin decir cuál registro ni de quién es. Esto lo hace explícito.
+ */
+async function assertNoBlockingLinks(franchiseIds) {
+  if (!franchiseIds.length) return
+  const blocking = await execKw(
+    'll.checklist.link', 'search_read', [[['link_franchise_id', 'in', franchiseIds]]],
+    { fields: ['id', 'link_show_name', 'link_checklist_id'] },
+  )
+  if (!blocking.length) return
+
+  console.error('\n✖ --reset no puede borrar el catálogo: quedan links que lo referencian (link_franchise_id es ondelete="restrict"):')
+  for (const l of blocking) {
+    const owner = l.link_checklist_id ? l.link_checklist_id[1] : '(sin checklist)'
+    console.error(`   - link ${l.id} "${l.link_show_name}" en checklist "${owner}"`)
+  }
+  console.error('  Borralos a mano (por ejemplo, desde el backoffice) antes de reintentar --reset.')
+  throw new Error('Reset abortado: hay links que bloquean el borrado del catálogo (detalle arriba)')
+}
+
+/* ------------------------------------------------------------------ *
  * Imágenes: los SVG de public/mock-images/ van al campo Binary en base64
  * ------------------------------------------------------------------ */
 
@@ -635,10 +1168,15 @@ async function seedFranchiseImages(f, franchiseId) {
 
 async function resetCatalog() {
   log('\n── --reset: borrando franquicias del seed ──')
+
+  const idsByFranchise = []
   for (const f of FRANCHISES) {
     const ids = await findFranchiseIds(f.name)
-    if (!ids.length) continue
+    if (ids.length) idsByFranchise.push({ f, ids })
+  }
+  await assertNoBlockingLinks(idsByFranchise.flatMap(({ ids }) => ids))
 
+  for (const { f, ids } of idsByFranchise) {
     // El image.group se borra en cascada con la franquicia, pero
     // ll.checklist.image.image_group_id es ondelete="set null": las imágenes
     // sobrevivirían huérfanas y cada reset acumularía basura. Se borran antes.
@@ -675,20 +1213,30 @@ async function main() {
   await authenticate()
   log(`  Autenticado (uid ${uid})`)
 
-  if (RESET) await resetCatalog()
+  if (RESET) {
+    // Las listas van primero: sus links (ondelete="restrict" hacia
+    // franquicia) bloquean el borrado del catálogo si siguen vivas.
+    await resetLists()
+    await resetCatalog()
+  }
 
   const langs = await seedLanguages()
   const masters = await seedMasters()
   await seedCatalog(masters, langs)
+  await seedLists()
 
   const totals = {}
   for (const model of ['franchise', 'content', 'version']) {
     totals[model] = await execKw(`ll.checklist.${model}`, 'search_count', [[]])
   }
+  totals.checklist = await execKw('ll.checklist.checklist', 'search_count', [[]])
+  totals.link = await execKw('ll.checklist.link', 'search_count', [[]])
+  totals.users = await execKw('res.users', 'search_count', [[['login', 'in', LISTS_SEED.map((u) => u.login)]]])
 
   log('\n── Resumen ──')
   log(`  creados: ${stats.created}   ya existían: ${stats.reused}   warnings: ${stats.warnings}`)
   log(`  en la base: ${totals.franchise} franquicias, ${totals.content} contenidos, ${totals.version} versiones`)
+  log(`  listas: ${totals.users} usuarios del seed, ${totals.checklist} checklists (incl. sombras), ${totals.link} links`)
   log(`\n  Verificalo en ${CONFIG.url} → menú "LL Checklist" → Database → Franchise`)
 }
 
