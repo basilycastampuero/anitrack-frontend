@@ -17,7 +17,7 @@
 | 3.5a | `ChecklistTree` accesible (solo lectura) | ✅ |
 | 3.5b | CRUD de carpetas | ✅ (commit `1a9f324`) |
 | 3.5c | Onboarding "starter lists" | ⬜ pendiente |
-| 3.6 | Vista de entries | ⬜ pendiente |
+| 3.6 | Vista de entries | ✅ (commit `573d465`) |
 
 > 3.5b se cerró en paralelo a B2/B3 (carril A no es el foco de esta
 > actualización de bitácora); detalle de lo construido en el mensaje del
@@ -33,8 +33,8 @@
 | B1 | Spike de sesión (`security/portal_access.xml`, `controllers/api_auth.py`: login/logout/me/register) | ✅ (commit `d17d00a`) |
 | B2 | Seed de listas en el Odoo local | ✅ (commit `cae4792`, paridad MSW en `178f64a`) |
 | B3 | `/me/*` lectura | ✅ (commit `b708bcb`) |
-| B4 | `/me/*` escritura | ⬜ pendiente |
-| B5 | Checkpoint de contrato (esquemas Zod contra respuestas reales) | ⬜ pendiente |
+| B4 | `/me/*` escritura | ✅ (commit `3c4e091`, `ll-odoo`) |
+| B5 | Checkpoint de contrato (esquemas Zod contra respuestas reales) | ✅ (drift encontrado y corregido, `ll-odoo` commit `b5f30a3`) |
 
 ## Qué se construyó
 
@@ -359,3 +359,198 @@ MSW (`178f64a`, tarea B2.7); el estado ya reportado sigue siendo el vigente
   default de `VITE_API_MODE` (deuda #8), y seguir la conversación con Chano
   sobre `invitation_scope` y si acepta el trabajo de `ll-odoo` como PR (sin
   cambios desde la sección anterior).
+
+## Actualización (2026-09-08) — Carril B cierra completo (B4, B5) + 3.6
+
+> Continúa esta misma bitácora, mismo día que la actualización anterior
+> (Carril B: B2 y B3). Carril B pasa de 3/5 a **5/5 — cierra por completo**.
+> Carril A pasa de 6/8 a **7/8** con 3.6 (vista de entries); solo queda
+> **3.5c** (onboarding "starter lists") para cerrar el sprint entero. No hay
+> ADR nuevo esta sesión: ninguna decisión cruza la vara de "nuevo trade-off
+> arquitectónico" (B4 aplica directamente lo que ADR-014/019 ya previeron).
+
+### 3.6 — Vista de entries (commit `573d465`)
+
+`ListEntryRow` + `FranchiseEntryGroup` + `ProgressBar`, en modo lectura (el
+stepper de progreso es 3.7, Sprint 3b). `progress.ts` formatea
+`aggregatedProgress` como función pura — el frontend no recalcula la
+agregación, la recibe pre-calculada del contrato (doc 04).
+
+- **Se replicó desde el algoritmo real de `compute_show_name`, no desde una
+  paráfrasis del contrato**, y ahí apareció un detalle de un carácter que el
+  contrato no documentaba: el separador de "total desconocido" del progreso
+  **agregado** es un guion simple (`-`, `[S2 03/-]`), distinto del em dash
+  (`—`) que usa el progreso de un entry **individual** suelto. Confundirlos
+  habría puesto en rojo el checkpoint de contrato (B5) sin que hubiera un bug
+  real detrás — solo una paráfrasis imprecisa del formato.
+- `ChecklistEntries` es nuevo: el panel deja de ser trivial (antes vivía
+  como placeholder de 3.5a) y pasa a decidir el render por `entry.kind`, así
+  que esa lógica sale de `pages/` (regla de convenciones del proyecto:
+  nada de decisiones de dominio en `pages/`).
+- Type guard `isVersionEntry` nuevo: `ListEntry` (doc 04) no es una unión
+  discriminada limpia en TS sin él — sin el guard hubiera hecho falta `as` o
+  `!` para acceder a `entry.version`, prohibido por la Definition of Done.
+- Verificado: 161 tests en 33 archivos, `typecheck`/`lint` limpios, más
+  verificación visual en Chromium (commit del propio cambio).
+
+### B4 — Escritura en `/me/*`, fuga de imágenes y `ir.rule` de copias (commit `3c4e091`, `ll-odoo`)
+
+CRUD de checklists en `/me/*` con el ORM del usuario, nunca `sudo()`, para
+que la `ir.rule` de ADR-014 acote sola; `checklist_user_id` sale siempre del
+perfil de la sesión (`_resolve_profile`, ADR-015) y nunca del body; una
+checklist ajena da **404**, no 403 (mismo criterio que B3: un 403 confirmaría
+que el id existe).
+
+- **Protección de ciclos, no anticipada por el diseño de Chano.** El modelo
+  no usa `_check_recursion` y `compute_fullname` recorre
+  `checklist_parent_id` sin límite — mover un nodo bajo su propio
+  descendiente habría causado recursión infinita y un dato corrupto
+  persistente. Nuevo helper `_creates_cycle(checklist_id, new_parent_id)`;
+  el `PATCH` con un `parentId` que crea ciclo ahora da **422**.
+- **Cierra la deuda que ADR-014 dejó abierta explícitamente** ("Deuda que
+  este ADR deja abierta", `docs/03-decisiones-arquitectura.md`): la ruta
+  `/api/v1/images/<id>` servía cualquier `ll.checklist.image` por id, con
+  `sudo()` y sin filtro. Ahora la ruta pública exige pertenencia a un
+  registro de catálogo publicado (`api_catalog.py`), y las imágenes privadas
+  van por `GET /me/images/<id>` (nueva, `api_lists.py`) con verificación de
+  dueño. Hallazgo del camino: `link_image_id` es un *related* a la imagen de
+  la checklist sombra del link, así que las imágenes de un `ListEntry` **son
+  siempre de catálogo** y siguen por la ruta pública (consecuencia ya
+  anotada en ADR-019); las portadas que un usuario suba a una carpeta propia
+  son las que ahora van por la ruta privada.
+- La `ir.rule` de `ll.checklist.link.copy` se amplió a **ambos lados** de la
+  relación (`lc_left_id` y `lc_right_id` — antes solo miraba `lc_left_id`),
+  lo que de paso arregla un falso negativo de `isSynced` en el contrato.
+  Sigue acotada a `base.group_portal` con `global="False"` (mismo criterio de
+  ADR-014); se verificó que el admin conserva read/write/unlink.
+- Nota de escala, sin acción por ahora: cada respuesta de escritura
+  reconstruye el árbol completo del usuario. Correcto para el volumen actual
+  de datos (seed de B2), no escala a cientos de checklists por usuario.
+- Verificado con `curl` y dos usuarios portal (mismo par de B3/ADR-014);
+  las respuestas de escritura validan contra los esquemas Zod del frontend.
+
+### B5 — Checkpoint de contrato (commit del fix: `b5f30a3`, `ll-odoo`)
+
+Lo corrió el **agente de tests**, no el de ingeniería que escribió B3/B4 —
+a propósito, porque B3 y B4 ya habían sido auto-validadas por quien las
+escribió. Test temporal contra el Odoo real con los esquemas Zod reales del
+frontend, 20 verificaciones; el archivo se borró al terminar (no queda un
+script de checkpoint permanente en el repo, mismo criterio que el spike 2.8).
+
+**Resultado: verde salvo un drift real** — exactamente el resultado que
+contemplaba el CA de la tarea (doc 07): "todos los esquemas en verde, o el
+drift documentado con su decisión".
+
+**El drift.** `POST /auth/register` con un email ya registrado devolvía
+`403 FORBIDDEN` con el **mensaje crudo de Postgres** (nombre de la
+constraint, columna y valor duplicado), en vez del `422 VALIDATION` con
+`field: "email"` que pide el contrato (doc 04). No era una limitación del
+backend en general: `POST /me/checklists` ya emitía `field` correctamente
+(B4); el hueco estaba acotado a la rama de error de `signup()`. Severidad
+real doble: además del desalineamiento de contrato, había una filtración de
+estructura interna de la base de datos al cliente.
+
+Validado en verde: los cuatro métodos de auth, lectura y escritura completas
+de `/me/checklists`, el árbol de cuatro niveles (seed de B2) contra el
+esquema recursivo, `Watching.linkCount == 2` con cuatro filas físicas de
+`ll.checklist.link`, el `aggregatedProgress` de Spy x Family, el entry
+suelto, los envelopes 401/403/404/422, imágenes públicas y privadas, y el
+aislamiento **con dos usuarios portal**.
+
+**Paridad MSW ↔ real**: sin mentiras nuevas de mock (ver la lección de la
+sección "Patrón recurrente del sprint" arriba). La única diferencia
+encontrada es intencional — el backend **omite** las claves
+`rating`/`startedAt`/`finishedAt` mientras MSW las puebla; ambos son válidos
+porque son opcionales (`[EXT]`, ADR-004), y confirma que ADR-004 se respeta.
+
+**No verificado empíricamente**: que `/api/v1/images/<id>` rechace la
+imagen de una checklist privada, porque **no existe endpoint de upload en
+el contrato** para armar ese escenario sin manipular datos por fuera de la
+API. Se confirmó **leyendo** `_image_in_published_catalog` (`api_catalog.py`)
+en su lugar — verificación de código, no empírica; queda dicho así para no
+sobrestimar la cobertura real del checkpoint.
+
+**Deuda de proceso detectada**: `libraryIndexSchema` y
+`checklistResponseSchema` no están exportados (viven inline, sin `export`,
+en `src/features/lists/services/lists.service.ts` — verificado leyendo el
+archivo), así que hubo que reconstruirlos a mano para validarlos desde
+afuera. Conviene exportarlos antes del próximo checkpoint de contrato.
+
+### Fix posterior del registro (commit `b5f30a3`, `ll-odoo`, hecho después de cerrar B5)
+
+El email ocupado se detecta ahora **antes** de llamar a `signup()`, con
+`active_test=False` porque un usuario archivado sigue ocupando el login (la
+constraint es de la tabla, no del recordset activo). El `except SignupError`
+que queda (sobre todo `invitation_scope=b2b`, ADR-015) ya no propaga el
+mensaje de la excepción al cliente: lo loguea del lado del servidor y
+responde genérico.
+
+Verificado con `curl` contra el Odoo local: email duplicado → `422` con
+`field: "email"`; registro nuevo válido → `201`; campos faltantes → `422`
+(sin regresión).
+
+### Deuda abierta del sprint, numerada junto a la anterior
+
+Continúa la numeración de la sección "Revisión pre-merge" de arriba (#1–#14).
+Nada de lo de abajo es nuevo hallazgo de revisión formal; son huecos
+detectados durante B4/B5 y quedan igual de trazables por número/nombre:
+
+- **#6, #7, #8** — sin cambios (ver arriba).
+- **#9 a #14** — hallazgos bajos de la revisión pre-merge de 3.5a/3.5b, sin
+  detalle adicional registrado en esta sesión.
+- **No hay punto de entrada de logout en la UI** — el hook está completo y
+  testeado desde 3.1, ningún componente lo usa (sin cambios desde la sección
+  anterior).
+- **La `ir.rule` de ADR-014 está acotada a `base.group_portal`**, así que un
+  admin llamando a `/me/*` no tendría restricción. Consecuencia de una
+  decisión ya cerrada (ADR-014), no de una implementación a medias; el admin
+  no consume esta API hoy. Apareció primero en B3, se reconfirmó en B4.
+- **Sin verificación con lectores de pantalla reales** (arrastrada desde la
+  sección de verificación original del sprint).
+- **Nada pasó por CI**: la rama `sprint-2-catalogo` va muy por delante de
+  `origin/main` con todo el Sprint 3a adentro pese al nombre, y la CI solo
+  corre en `main`/`develop`.
+- **`libraryIndexSchema`/`checklistResponseSchema` sin exportar** (nueva,
+  detectada en B5 — ver arriba).
+
+### Verificación de esta actualización
+
+Frontend (commit `573d465`): `npm run typecheck` limpio, `npm run lint` sin
+errores, `npx vitest run` — **161 tests en 33 archivos**, todos en verde
+(recorrido de nuevo al escribir esta bitácora, mismo resultado). Más
+verificación visual en Chromium.
+
+Backend (`ll-odoo`, sin suite automatizada — verificación manual, mismo
+estilo que B1/B2/B3): CRUD de `/me/*` con dos usuarios portal, protección de
+ciclos, `ir.rule` de `link.copy` en ambos lados, checkpoint Zod de 20
+verificaciones (19 en verde + 1 drift), y el fix del registro re-verificado
+con `curl` (email duplicado, registro válido, campos faltantes).
+
+### Qué falta (siguiente paso), actualizado
+
+- **Carril A — última tarea del sprint**: **3.5c**, onboarding "starter
+  lists" (ADR-003) — no hay evidencia de que esté implementada (sin commit
+  en el repo, sin componente `EmptyState`/CTA de starter lists en
+  `src/features/lists/` ni `src/pages/MyListsPage.tsx`, verificado en esta
+  sesión). El sprint **no está cerrado** hasta que se resuelva; ver nota de
+  consistencia más abajo.
+- **Carril B: cerrado (5/5)**. No quedan tareas planificadas de backend en
+  el Sprint 3a; lo que sigue (3.7 en adelante, tracking) es Sprint 3b.
+- Exportar `libraryIndexSchema` y `checklistResponseSchema` antes del
+  próximo checkpoint de contrato (deuda nueva de esta sesión).
+- Decidir el punto de entrada de logout en la UI y el default de
+  `VITE_API_MODE` (deuda #8) — sin cambios.
+- Seguir la conversación con Chano sobre `invitation_scope` de producción y
+  si acepta el trabajo de `ll-odoo` como PR — sin cambios.
+
+> **Nota de consistencia (2026-09-08).** Esta actualización se escribió a
+> partir de un encargo que describía el Sprint 3a como cerrado (carril A
+> 8/8). Verificando el repo (`git log`, `git status`, y el código de
+> `src/features/lists/` y `src/pages/MyListsPage.tsx`) no se encontró
+> ningún rastro de 3.5c: ni commit, ni componente de onboarding, ni CTA de
+> "starter lists". Esta bitácora refleja el estado verificado (carril A
+> 7/8, carril B 5/5) en vez del estado declarado; `docs/README.md` y
+> `docs-backend/README.md` se actualizaron con el mismo criterio. Si 3.5c
+> ya está hecho en otro lado (otra rama, trabajo no commiteado que se haya
+> perdido), esta nota queda para que quien lo sepa la corrija con el dato
+> real.

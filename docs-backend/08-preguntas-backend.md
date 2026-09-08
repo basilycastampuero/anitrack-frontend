@@ -563,16 +563,24 @@ lectura de código) dos de los hallazgos anteriores y sumar dos datos nuevos:
    pushear): `POST /api/v1/auth/register`. Detalle completo en ADR-015
    ([03-decisiones-arquitectura.md](../docs/03-decisiones-arquitectura.md)).
    Sigue abierto solo el `invitation_scope` de **producción** (puede ser
-   `b2b`, deshabilitando el alta — la 8.2 de abajo sigue sin responder) y un
-   requisito nuevo del Sprint 3a: **`[FE→BE]`** el envelope de error de
-   `register` necesita distinguir "alta deshabilitada" de "email duplicado".
-   Hoy `auth_signup.SignupError` no expone una excepción propia por caso, así
-   que `api_auth.py` devuelve `403 FORBIDDEN` para ambos sin `field`; MSW ya
-   simula el caso deseado (`422 VALIDATION` + `field: "email"`, ver
-   [04-contrato-api.md](../docs/04-contrato-api.md)), pero falta implementarlo
-   en el controlador real — detectar el email duplicado antes de llamar a
-   `signup()` (o inspeccionar el mensaje de `SignupError`) y devolver el
-   `field` en el envelope.
+   `b2b`, deshabilitando el alta — la 8.2 de abajo sigue sin responder).
+
+   > **[VERIFICADO 2026-09-08 — carril B, tarea B5 + fix, `ll-odoo` commit
+   > `b5f30a3`]** El requisito `[FE→BE]` de arriba (el envelope de `register`
+   > necesita distinguir "alta deshabilitada" de "email duplicado") está
+   > **resuelto**. El email duplicado se detecta ahora **antes** de llamar a
+   > `signup()` (con `active_test=False`, porque un usuario archivado sigue
+   > ocupando el login) y responde `422 VALIDATION` con `field: "email"`; el
+   > `except SignupError` que queda (sobre todo `invitation_scope=b2b`) ya no
+   > propaga el mensaje de la excepción al cliente, solo lo loguea del lado
+   > del servidor. El hallazgo que motivó el fix: hasta B5, el email duplicado
+   > devolvía `403 FORBIDDEN` con el **mensaje crudo de Postgres** (nombre de
+   > la constraint, columna y valor duplicado) — una filtración de estructura
+   > interna, no solo un desalineamiento de contrato. Verificado con `curl`
+   > contra el Odoo local: email duplicado → 422 + `field: "email"`, registro
+   > válido → 201, campos faltantes → 422. Detalle en
+   > [04-contrato-api.md](../docs/04-contrato-api.md) y
+   > [13-sprint3a-avance.md](../docs/13-sprint3a-avance.md).
 
    - 8.1. Si hay signup propio: ¿hay verificación de email y recuperación de
      contraseña ya resueltas en Odoo estándar, o hay que construirlas?

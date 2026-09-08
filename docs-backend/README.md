@@ -15,7 +15,7 @@ porque es documentación de análisis, no decisiones propias del frontend.
 Los números de archivo son los de la numeración original de planificación (ver
 [`../docs/README.md`](../docs/README.md)), no correlativos dentro de esta carpeta.
 
-**Estado (actualizado 2026-09-03):** el bloqueo #1 original dejó de serlo. La
+**Estado (actualizado 2026-09-08):** el bloqueo #1 original dejó de serlo. La
 sección de hosting/deploy la respondió Chano (Railway self-hosted, sin
 staging remoto cómodo, frontend debe correr contra Odoo local); las secciones
 de auth e imágenes se resolvieron leyendo y probando el código de `ll-odoo`
@@ -26,9 +26,17 @@ El transporte de API tampoco depende ya de una respuesta suya: el frontend
 escribió los controladores REST él mismo en la rama `anitrack/rest-catalog-api`
 de `ll-odoo` (sin pushear al remoto de Chano) — el del catálogo (pregunta 1 y
 7 del doc 08, cerrando la tarea 2.8 del plan: no hace falta adaptador, ver
-[`../docs/11-spike-integracion-real.md`](../docs/11-spike-integracion-real.md))
-y ahora el de sesión (`/api/v1/auth/*`, tarea B1 del Sprint 3a, commit
-`d17d00a`, ver [`../docs/13-sprint3a-avance.md`](../docs/13-sprint3a-avance.md)).
+[`../docs/11-spike-integracion-real.md`](../docs/11-spike-integracion-real.md)),
+el de sesión (`/api/v1/auth/*`, tarea B1, commit `d17d00a`), el de lectura de
+listas (`/me/*`, tarea B3, commit `b708bcb`) y ahora también el de
+**escritura** (tarea B4, commit `3c4e091`, incluye cerrar la fuga de imágenes
+que ADR-014 había dejado como deuda abierta). El **checkpoint de contrato
+(tarea B5)** cerró el carril B completo: encontró y corrigió un drift real —
+`POST /auth/register` con email duplicado filtraba el mensaje crudo de
+Postgres en vez del `422 VALIDATION` + `field: "email"` que pide el contrato
+(fix en commit `b5f30a3`) — cerrando también la última nota `[FE→BE]`
+pendiente de la pregunta 8 de este doc. Ver
+[`../docs/13-sprint3a-avance.md`](../docs/13-sprint3a-avance.md).
 Lo que sigue genuinamente bloqueado, solo de producción: el `invitation_scope`
 de la instancia real de Chano (pregunta 8, nota final), qué pasa si el mismo
 email se usa por registro propio y por Twitch (pregunta 8.2), y si su app de

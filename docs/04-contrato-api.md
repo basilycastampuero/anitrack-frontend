@@ -38,11 +38,13 @@ Códigos: `UNAUTHORIZED` (401), `FORBIDDEN` (403), `NOT_FOUND` (404),
 el campo del formulario al que refiere el error (p. ej.
 `{ "error": { "code": "VALIDATION", "message": "Email already registered", "field": "email" } }`).
 El frontend lo consume en `RegisterForm` (`error.field` → `form.setError`) si
-está ausente, el error se muestra a nivel de formulario. **`[FE→BE]` pendiente
-de implementar en el backend real**: hoy solo lo emite MSW
-(`src/mocks/handlers.ts`); el helper `_error(code, message, status)` del
-controlador real (`ll-odoo/odoo-modules/ll_webpage/controllers/api_common.py`)
-todavía no acepta un parámetro `field`.
+está ausente, el error se muestra a nivel de formulario. **Implementado en el
+backend real** (tarea B4, `ll-odoo` commit `3c4e091`): `_error(code, message,
+status, field=None)` en
+`ll-odoo/odoo-modules/ll_webpage/controllers/api_common.py` ya acepta el
+parámetro. Lo emiten `POST /me/checklists` (validaciones de `name`/`parentId`/
+`order`/`sortingMode`, y el 422 de ciclo) y `POST /auth/register` (ver más
+abajo, cerrado con el fix de la tarea B5).
 
 ---
 
@@ -77,18 +79,21 @@ Al volver, la SPA llama `me`.
 ### `POST /api/v1/auth/register`
 Body: `{ "name": string, "email": string, "password": string }`
 → `200 { "user": UserSession }` + cookie de sesión (el alta autentica de una,
-ADR-015). `422 VALIDATION` si falta algún campo. `403 FORBIDDEN` si el alta
-está deshabilitada (`auth_signup.invitation_scope = "b2b"` en esa base) o el
-email ya existe — **el backend real no distingue estos dos motivos**:
-`auth_signup.SignupError` no expone una excepción propia por caso (verificado
-en `ll-odoo/odoo-modules/ll_webpage/controllers/api_auth.py`), así que ambos
-llegan hoy como el mismo `403` sin `field`. MSW sí los distingue y devuelve
-`422 VALIDATION` con `field: "email"` para el caso de email duplicado (ver
-`field?: string` arriba) — contrato deseado, no lo que hace hoy el backend
-real. Antes decía "el backend actual no expone signup"; eso quedó obsoleto:
-resuelto por ADR-015 (`res.users.signup()`, carril B, tarea B1). Ver pregunta
-8 del doc 08 (cerrada) y 8.2 (todavía abierta: qué pasa si el mismo email se
-usa por email/clave y por Twitch).
+ADR-015). `422 VALIDATION` si falta algún campo. **`422 VALIDATION` con
+`field: "email"`** si el email ya está registrado (activo o archivado —
+verificado antes de llamar a `signup()`, con `active_test=False`, porque un
+usuario archivado sigue ocupando el login). `403 FORBIDDEN` (sin `field`) si
+el alta está deshabilitada (`auth_signup.invitation_scope = "b2b"` en esa
+base). Implementado y verificado con `curl` contra el Odoo local (tarea B5 +
+su fix, `ll-odoo` commit `b5f30a3`): antes de este fix, el email duplicado
+devolvía `403 FORBIDDEN` con el **mensaje crudo de Postgres** (constraint,
+columna y valor duplicado) en vez de distinguirse del caso "alta
+deshabilitada" — filtración de estructura interna además de desalineamiento
+de contrato. Detalle del hallazgo y del fix en
+[13-sprint3a-avance.md](./13-sprint3a-avance.md) (sección "Actualización
+2026-09-08 — Carril B cierra completo (B4, B5) + 3.6").
+Ver pregunta 8 del doc 08 (cerrada) y 8.2 (todavía abierta: qué pasa si el
+mismo email se usa por email/clave y por Twitch).
 
 ---
 

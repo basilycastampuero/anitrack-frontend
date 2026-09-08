@@ -462,6 +462,12 @@ Se corrige en el Sprint 3a (tarea B4 del doc 07): la ruta pública filtra por
 pertenencia a un registro de catálogo publicado, y las imágenes privadas se
 sirven por una ruta autenticada aparte.
 
+> **[CERRADO 2026-09-08 — tarea B4, `ll-odoo` commit `3c4e091`]** `GET
+> /api/v1/images/<id>` (`api_catalog.py`) ahora exige pertenencia a un
+> registro de catálogo publicado; las imágenes privadas se sirven por `GET
+> /me/images/<id>` (`api_lists.py`, nueva) con verificación de dueño. Detalle
+> en [13-sprint3a-avance.md](./13-sprint3a-avance.md).
+
 ---
 
 ## ADR-015 — Identidad: el perfil `ll.checklist.user` se resuelve perezosamente desde la sesión; el alta de cuenta usa `res.users.signup()`
