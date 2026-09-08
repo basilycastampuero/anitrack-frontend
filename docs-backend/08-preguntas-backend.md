@@ -426,6 +426,17 @@ lectura de código) dos de los hallazgos anteriores y sumar dos datos nuevos:
    > seguir construyendo (se puede registrar una app de Twitch de prueba propia
    > y configurarla acá mismo).
 
+   > **Actualización (2026-08-31) — replanteo de la tarea 3.3.** La tarea
+   > "OAuth Twitch" del plan (doc 07) se partió en dos, sin cambiar nada de lo
+   > respondido arriba: **3.3a** (Sprint 3a, carril A, camino crítico) es solo
+   > el botón "Continue with Twitch" mockeado + `/auth/callback` leyendo
+   > `?error=` — sin proveedor real, cerrada en esta sesión (ver
+   > [13-sprint3a-avance.md](../docs/13-sprint3a-avance.md)). **3.3b** (registrar
+   > la app de Twitch propia, configurar `auth.oauth.provider` en el Odoo local
+   > y verificar el flujo real de punta a punta) queda recortable en Sprint 3b,
+   > donde ya no compite con el camino crítico del sprint (ver doc 07, sección
+   > de Sprint 3b).
+
    - 6.1. ¿El `redirect_uri` de Twitch está en whitelist fija en la app de
      Twitch, o es configurable por entorno? Necesito una URL de callback
      distinta en dev/staging/prod.
@@ -542,6 +553,26 @@ lectura de código) dos de los hallazgos anteriores y sumar dos datos nuevos:
    (login social + formulario email/clave) detrás de la capa de auth, y con MSW
    simulo el signup. Si al final el backend solo da Twitch, oculto el formulario
    con un flag. Así no me bloqueo por una decisión de producto todavía abierta.
+   → **[VERIFICADO 2026-08-31 — ADR-015]** **Cerrada.** Sí hay signup
+   email/contraseña: `auth_signup` está instalado en el Odoo local, con
+   `invitation_scope = 'b2c'` (registro libre) y `reset_password = True`.
+   `res.users.signup()` crea el usuario a partir de
+   `base.template_portal_user_id` (grupo **Portal**, verificado creando
+   `signuptest@anitrack.dev`). Implementado en el carril B (tarea B1,
+   `controllers/api_auth.py`, rama `anitrack/rest-catalog-api`, sin
+   pushear): `POST /api/v1/auth/register`. Detalle completo en ADR-015
+   ([03-decisiones-arquitectura.md](../docs/03-decisiones-arquitectura.md)).
+   Sigue abierto solo el `invitation_scope` de **producción** (puede ser
+   `b2b`, deshabilitando el alta — la 8.2 de abajo sigue sin responder) y un
+   requisito nuevo del Sprint 3a: **`[FE→BE]`** el envelope de error de
+   `register` necesita distinguir "alta deshabilitada" de "email duplicado".
+   Hoy `auth_signup.SignupError` no expone una excepción propia por caso, así
+   que `api_auth.py` devuelve `403 FORBIDDEN` para ambos sin `field`; MSW ya
+   simula el caso deseado (`422 VALIDATION` + `field: "email"`, ver
+   [04-contrato-api.md](../docs/04-contrato-api.md)), pero falta implementarlo
+   en el controlador real — detectar el email duplicado antes de llamar a
+   `signup()` (o inspeccionar el mensaje de `SignupError`) y devolver el
+   `field` en el envelope.
 
    - 8.1. Si hay signup propio: ¿hay verificación de email y recuperación de
      contraseña ya resueltas en Odoo estándar, o hay que construirlas?

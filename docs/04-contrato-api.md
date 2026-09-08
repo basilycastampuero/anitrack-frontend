@@ -33,6 +33,17 @@
 Códigos: `UNAUTHORIZED` (401), `FORBIDDEN` (403), `NOT_FOUND` (404),
 `VALIDATION` (422), `INTERNAL` (500).
 
+`field?: string` — extensión opcional del envelope (Sprint 3a, ver
+[13-sprint3a-avance.md](./13-sprint3a-avance.md)): en un `VALIDATION`, nombra
+el campo del formulario al que refiere el error (p. ej.
+`{ "error": { "code": "VALIDATION", "message": "Email already registered", "field": "email" } }`).
+El frontend lo consume en `RegisterForm` (`error.field` → `form.setError`) si
+está ausente, el error se muestra a nivel de formulario. **`[FE→BE]` pendiente
+de implementar en el backend real**: hoy solo lo emite MSW
+(`src/mocks/handlers.ts`); el helper `_error(code, message, status)` del
+controlador real (`ll-odoo/odoo-modules/ll_webpage/controllers/api_common.py`)
+todavía no acepta un parámetro `field`.
+
 ---
 
 ## Auth
@@ -63,9 +74,21 @@ No es endpoint JSON: la SPA navega a
 existente de `auth_oauth` y redirige de vuelta con la cookie puesta).
 Al volver, la SPA llama `me`.
 
-### `POST /api/v1/auth/register` — ⚠️ pendiente
-El backend actual no expone signup (usuarios se crean por OAuth o backoffice).
-Pregunta 9 del doc 08. El frontend diseña la página igual; MSW la mockea.
+### `POST /api/v1/auth/register`
+Body: `{ "name": string, "email": string, "password": string }`
+→ `200 { "user": UserSession }` + cookie de sesión (el alta autentica de una,
+ADR-015). `422 VALIDATION` si falta algún campo. `403 FORBIDDEN` si el alta
+está deshabilitada (`auth_signup.invitation_scope = "b2b"` en esa base) o el
+email ya existe — **el backend real no distingue estos dos motivos**:
+`auth_signup.SignupError` no expone una excepción propia por caso (verificado
+en `ll-odoo/odoo-modules/ll_webpage/controllers/api_auth.py`), así que ambos
+llegan hoy como el mismo `403` sin `field`. MSW sí los distingue y devuelve
+`422 VALIDATION` con `field: "email"` para el caso de email duplicado (ver
+`field?: string` arriba) — contrato deseado, no lo que hace hoy el backend
+real. Antes decía "el backend actual no expone signup"; eso quedó obsoleto:
+resuelto por ADR-015 (`res.users.signup()`, carril B, tarea B1). Ver pregunta
+8 del doc 08 (cerrada) y 8.2 (todavía abierta: qué pasa si el mismo email se
+usa por email/clave y por Twitch).
 
 ---
 

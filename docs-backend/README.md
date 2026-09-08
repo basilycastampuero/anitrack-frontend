@@ -15,14 +15,23 @@ porque es documentación de análisis, no decisiones propias del frontend.
 Los números de archivo son los de la numeración original de planificación (ver
 [`../docs/README.md`](../docs/README.md)), no correlativos dentro de esta carpeta.
 
-**Estado:** bloqueo #1 del proyecto — la conversación con Chano usando el doc 08
-empezó (respondió la sección de hosting/deploy: Railway self-hosted, sin
-staging remoto cómodo, frontend debe correr contra Odoo local), pero faltan
-las demás secciones (auth, campos [EXT]), algunas bloqueantes para el Sprint
-3a (tarea 3.3, OAuth de Twitch). El transporte de API dejó de depender de una
-respuesta suya: el frontend escribió el controlador REST él mismo (rama
-`anitrack/rest-catalog-api` de `ll-odoo`, sin commitear/pushear aún — ver
-pregunta 1 y 7 del doc 08, y [`../docs/11-spike-integracion-real.md`](../docs/11-spike-integracion-real.md)),
-cerrando también la tarea 2.8 del plan (adaptador: no hace falta). Mientras
-tanto, el frontend construye contra MSW sin depender de esto (ADR-001 en
+**Estado (actualizado 2026-09-03):** el bloqueo #1 original dejó de serlo. La
+sección de hosting/deploy la respondió Chano (Railway self-hosted, sin
+staging remoto cómodo, frontend debe correr contra Odoo local); las secciones
+de auth e imágenes se resolvieron leyendo y probando el código de `ll-odoo`
+directamente en vez de esperar respuesta (preguntas 6, 7 y 8, marcadas
+`[VERIFICADO]`/cerradas — ver ADR-014 a ADR-017 en
 [`../docs/03-decisiones-arquitectura.md`](../docs/03-decisiones-arquitectura.md)).
+El transporte de API tampoco depende ya de una respuesta suya: el frontend
+escribió los controladores REST él mismo en la rama `anitrack/rest-catalog-api`
+de `ll-odoo` (sin pushear al remoto de Chano) — el del catálogo (pregunta 1 y
+7 del doc 08, cerrando la tarea 2.8 del plan: no hace falta adaptador, ver
+[`../docs/11-spike-integracion-real.md`](../docs/11-spike-integracion-real.md))
+y ahora el de sesión (`/api/v1/auth/*`, tarea B1 del Sprint 3a, commit
+`d17d00a`, ver [`../docs/13-sprint3a-avance.md`](../docs/13-sprint3a-avance.md)).
+Lo que sigue genuinamente bloqueado, solo de producción: el `invitation_scope`
+de la instancia real de Chano (pregunta 8, nota final), qué pasa si el mismo
+email se usa por registro propio y por Twitch (pregunta 8.2), y si su app de
+Twitch acepta un `redirect_uri` de este frontend (pregunta 6.1). Mientras
+tanto, el frontend sigue construyendo contra MSW sin depender de nada de esto
+(ADR-001 y ADR-017).
