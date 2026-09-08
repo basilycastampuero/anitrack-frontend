@@ -212,6 +212,43 @@ interface SearchHit {
 
 ---
 
+## Imágenes
+
+Únicas rutas del contrato que no devuelven JSON: sirven el binario de la
+imagen directamente (`Content-Type` de imagen). Todos los `imageUrl` del
+resto del contrato apuntan a una de las dos.
+
+### `GET /api/v1/images/:id` (pública)
+Portada o imagen de galería de un ítem de **catálogo**. Exige que la imagen
+pertenezca a un `franchise`/`content` **publicado** (portada directa o de
+galería de una franquicia publicada, o portada de un content publicado cuya
+franquicia también lo esté) → `404` si no. Cierra la deuda que ADR-014 había
+dejado documentada como abierta (ver
+[03-decisiones-arquitectura.md](./03-decisiones-arquitectura.md), ADR-014):
+antes servía cualquier `ll.checklist.image` por id, con `sudo()` y sin
+ningún filtro. Es la ruta a la que apuntan los `imageUrl` de
+`FranchiseSummary`/`FranchiseDetail`/`ContentDetail`/`VersionDetail`/
+`SearchHit`, y también el `imageUrl` de un `ListEntry`: el wizard de Odoo
+siempre llena `link_image_id` con una imagen de catálogo, nunca con una del
+usuario (ADR-019), así que las imágenes de un entry son siempre públicas.
+
+### `GET /api/v1/me/images/:id` (auth requerida)
+Contraparte privada: portada que el usuario subió a una checklist **propia**
+(`checklist_image_id`). Verifica que la imagen pertenezca a alguna checklist
+(real o "sombra") del usuario de la sesión, vía ORM del usuario (`ir.rule`
+de ADR-014) → `404` si no es suya (nunca `403`, mismo criterio que el resto
+de `/me/*`: un `403` confirmaría que el id existe). Es la ruta a la que
+apunta el `imageUrl` de un `ChecklistNode` cuando la carpeta tiene portada
+propia.
+
+Implementado en `ll-odoo` (tarea B4, commit `3c4e091`):
+`_image_in_published_catalog` en `api_catalog.py` y `_owned_image_or_none`
+en `api_lists.py`. Detalle en
+[13-sprint3a-avance.md](./13-sprint3a-avance.md) (sección "B4 — Escritura en
+`/me/*`, fuga de imágenes y `ir.rule` de copias").
+
+---
+
 ## Mis listas (auth requerida)
 
 ### `GET /api/v1/me/checklists`

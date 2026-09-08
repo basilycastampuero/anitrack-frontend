@@ -89,6 +89,12 @@ del producto y donde vive todo el riesgo técnico (optimistic + rollback).
 **Objetivo demo:** iniciar sesión, crear y organizar listas propias, ver sus
 entries (todavía sin poder modificar progreso).
 
+> ✅ **Sprint 3a completo** (2026-09-08): carril A 8/8 (3.1–3.6, incluida
+> 3.5a/3.5b/3.5c) y carril B 5/5 (B1–B5, backend real en `ll-odoo` sin
+> pushear), objetivo demo cumplido — cierre en
+> [13-sprint3a-avance.md](./13-sprint3a-avance.md) (sección "Actualización
+> 2026-09-08 — 3.5c cierra el carril A + Cierre de Sprint 3a").
+
 > **Replanificado el 2026-08-31** tras el diseño técnico del sprint. El *qué*
 > no cambió; el *cómo* está en [12-diseno-sprint3a.md](./12-diseno-sprint3a.md)
 > y las decisiones de peso quedaron como **ADR-014 a ADR-017**. Cambios
@@ -224,8 +230,8 @@ path.
 | Modelo Odoo cambia (rama activa) | Media | Medio | Contrato acordado temprano (Fase 0); re-mapear solo en adaptador |
 | CORS/cookies bloquean integración | Media | Alto | ADR-005 same-origin por proxy; plan B CORS documentado |
 | Scope creep del brief (reviews, recomendaciones) | Media | Medio | Doc 01 fija alcance; extras = v2 |
-| **Divergencia silenciosa MSW vs. backend** (ADR-017: dos implementaciones del mismo contrato durante 3a) | Alta | Medio | Checkpoint de contrato B5 con los esquemas Zod del frontend contra las respuestas reales; es obligatorio para cerrar el sprint |
-| **Las reglas de ADR-014 rompen el backoffice de Chano** (una `ir.rule` mal acotada aplica también al grupo Administrator — ya pasó en la prueba con `global=True`) | Baja | Alto | Las reglas van con `groups=[base.group_portal]`, nunca `global`; viven en `ll_webpage`, no en `ll_checklist`; test de regresión que verifica que el admin conserva read/write/unlink |
-| **Fuga de imágenes privadas por `/api/v1/images/<id>`** (sirve cualquier imagen por id con `sudo()`, sin filtro; hoy inocuo, deja de serlo cuando una checklist tenga imagen) | Media | Medio | Tarea B4: la ruta pública exige pertenencia a catálogo publicado; las privadas van por ruta autenticada |
+| **Divergencia silenciosa MSW vs. backend** (ADR-017: dos implementaciones del mismo contrato durante 3a) | Alta | Medio | Checkpoint de contrato B5 con los esquemas Zod del frontend contra las respuestas reales; es obligatorio para cerrar el sprint — **✅ Cerrado (B5, 2026-09-08):** corrido contra el Odoo real, 19/20 en verde y **1 drift real encontrado y corregido** (`POST /auth/register`, commit `b5f30a3`, `ll-odoo`) — la mitigación cumplió exactamente su función, ver [13-sprint3a-avance.md](./13-sprint3a-avance.md) |
+| **Las reglas de ADR-014 rompen el backoffice de Chano** (una `ir.rule` mal acotada aplica también al grupo Administrator — ya pasó en la prueba con `global=True`) | Baja | Alto | Las reglas van con `groups=[base.group_portal]`, nunca `global`; viven en `ll_webpage`, no en `ll_checklist`; test de regresión que verifica que el admin conserva read/write/unlink — **✅ Verificado (B3/B4, 2026-09-08):** el admin conserva read/write/unlink en `ll.checklist.link.copy` tras ampliar la regla a ambos lados de la relación en B4 |
+| **Fuga de imágenes privadas por `/api/v1/images/<id>`** (sirve cualquier imagen por id con `sudo()`, sin filtro; hoy inocuo, deja de serlo cuando una checklist tenga imagen) | Media | Medio | Tarea B4: la ruta pública exige pertenencia a catálogo publicado; las privadas van por ruta autenticada — **✅ Cerrado (B4, 2026-09-08, commit `3c4e091` en `ll-odoo`):** `GET /api/v1/images/<id>` ahora exige pertenencia a catálogo publicado (`_image_in_published_catalog`), imágenes privadas sirven por `GET /me/images/<id>` con verificación de dueño (ver ADR-014 en [03-decisiones-arquitectura.md](./03-decisiones-arquitectura.md), bloque "[CERRADO 2026-09-08]") |
 | **`auth_signup.invitation_scope` en `b2b` en producción** ⇒ el registro por email falla (es config de la base, no del código) | Media | Bajo | `/auth/register` devuelve `403 FORBIDDEN` con mensaje explícito y el formulario se oculta por flag (ADR-015); confirmar con Chano antes del deploy |
 | Plazo más corto que las 10 semanas del plan | — | Alto | Orden de recorte explícito: primero los ⚪ (3.11, 4.9, 4.10), después los 🟡 de S3b (3.10, 3.9), después S4 al mínimo (4.1 fuera + deploy + README). S1→S3b son el producto y no se tocan |

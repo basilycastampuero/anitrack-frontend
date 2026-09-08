@@ -16,7 +16,7 @@
 | 3.4 | `lists.service` + hooks de mutación | ✅ |
 | 3.5a | `ChecklistTree` accesible (solo lectura) | ✅ |
 | 3.5b | CRUD de carpetas | ✅ (commit `1a9f324`) |
-| 3.5c | Onboarding "starter lists" | ⬜ pendiente |
+| 3.5c | Onboarding "starter lists" | ✅ (commit `a43fc9a`) |
 | 3.6 | Vista de entries | ✅ (commit `573d465`) |
 
 > 3.5b se cerró en paralelo a B2/B3 (carril A no es el foco de esta
@@ -554,3 +554,129 @@ con `curl` (email duplicado, registro válido, campos faltantes).
 > ya está hecho en otro lado (otra rama, trabajo no commiteado que se haya
 > perdido), esta nota queda para que quien lo sepa la corrija con el dato
 > real.
+
+> **Resolución de la nota anterior (2026-09-08, misma fecha).** 3.5c se
+> implementó después de escribirse la nota de arriba: commit `a43fc9a`,
+> verificado en el repo (`git log`, `StarterListsPrompt.tsx`,
+> `useCreateStarterLists.ts`). El carril A cierra 8/8. Detalle completo en la
+> sección siguiente.
+
+## Actualización (2026-09-08) — 3.5c cierra el carril A + Cierre de Sprint 3a
+
+> Continúa esta misma bitácora, mismo día que las dos actualizaciones
+> anteriores. Con 3.5c, el **carril A cierra 8/8** y, junto con el carril B ya
+> cerrado 5/5, **el Sprint 3a queda completo**. No hay ADR nuevo esta sesión:
+> 3.5c aplica directamente ADR-003 (checklists normales, no un enum), sin
+> trade-off nuevo que registrar.
+
+### 3.5c — Onboarding de listas sugeridas (commit `a43fc9a`)
+
+Con el árbol vacío, en vez del `EmptyState` genérico (`StarterListsPrompt.tsx`)
+aparece un CTA que crea las cinco listas sugeridas: Watching, Completed, On
+Hold, Dropped, Plan to Watch.
+
+- **Siguiendo ADR-003, son checklists normales y no un enum de dominio**: el
+  árbol de `Checklist` sigue siendo genérico, y por eso los nombres viven en
+  `src/features/lists/constants.ts` (`STARTER_LIST_KEYS`) y sus etiquetas en
+  `i18n/en.ts` (`t.lists.starterLists`), no incrustados en el componente — el
+  usuario puede renombrarlas, borrarlas o ignorarlas después de creadas.
+- **Se crean en secuencia (`for...of` + `await`), nunca con `Promise.all`**:
+  el `order` lo asigna el backend (y el mock) según `siblings.length` en el
+  momento en que llega cada `POST`, no un campo que el cliente envíe —
+  crearlas en paralelo dejaría el orden final a merced de qué request
+  resuelve primero, y "Watching" podría no terminar siendo la primera lista
+  del árbol.
+- **Una sola `useMutation` (no cinco)**, así `onSettled` invalida `tree()` UNA
+  vez cuando termina el lote completo, no una vez por lista creada. Corre en
+  éxito **y** en error (mismo criterio que `useUpdateChecklist`), así que si
+  una creación falla a mitad de camino, **no se revierte lo ya creado**
+  (decisión del plan, doc 12 §3.5c): el árbol siempre refleja lo que el
+  servidor efectivamente llegó a crear, y deshacer listas que el usuario
+  acaba de ver aparecer sería peor UX que dejarlas.
+- **Séptimo falso verde del sprint, de una clase distinta a los seis mocks
+  mentirosos de la sección "Patrón recurrente" de arriba**: el test del
+  estado vacío de `ChecklistTree` tenía un `waitFor(() =>
+  expect(screen.queryByRole('tree')).not.toBeInTheDocument())` que se
+  resolvía **durante el skeleton** (donde tampoco hay `role="tree"` todavía),
+  así que el test pasaba sin llegar a comprobar el estado real. En los seis
+  mocks el problema era *contra qué* se testeaba (un stub que nadie
+  ejercitaba); acá es *cuándo*: un `waitFor` que espera "algo distinto del
+  estado anterior" se satisface con cualquier transición intermedia,
+  incluido el loading. Reescrito con `findByRole` esperando la condición
+  final (CTA visible → click → las cinco listas en orden → el CTA no
+  reaparece).
+- **Hallazgo de entorno**: en modo mock, `currentUserId` es una variable
+  mutable a nivel de módulo en `src/mocks/handlers.ts` (`let currentUserId:
+  number | null = 1`), así que un `page.reload()` de Playwright recarga el
+  bundle entero y resetea la sesión al usuario 1 por defecto — el mismo tipo
+  de estado mutable a nivel de módulo que la deuda **#7** (seed que no se
+  resetea), aquí manifestado contra la sesión en vez del seed de datos. No se
+  había notado en todo el sprint porque todas las verificaciones visuales
+  anteriores usaban el usuario por defecto; apareció al verificar el CTA con
+  el usuario vacío del seed (`sam@example.com`). No afecta al producto, sí a
+  cómo se escriben los scripts de verificación en navegador real: hay que
+  navegar con clicks, no recargar la página, para no perder la sesión del
+  usuario que se está probando.
+
+Verificado: `npm run typecheck` y `npm run lint` limpios, `npx vitest run` —
+**166 tests en 35 archivos**, todos en verde. Flujo completo verificado en
+navegador real (Chromium de Playwright) con el usuario vacío del seed.
+
+### Deuda abierta del sprint, consolidada al cierre
+
+Todo lo detectado durante el Sprint 3a completo (carriles A y B), junta y
+visible en un solo lugar. Sigue la numeración de la sección "Revisión
+pre-merge" de arriba (#1–#14):
+
+- **#6** — `patchChecklistNode` (`src/features/lists/utils/checklistTree.ts`)
+  acepta `parentId`/`order` en el body sin mover ni reordenar nada, y el mock
+  (`src/mocks/handlers.ts`) tampoco. Se activa cuando alguien agregue mover
+  carpetas entre padres.
+- **#7** — el seed de MSW no se resetea entre tests. **Dejó de ser un flake
+  latente y pasó a ser un costo recurrente**: afectó a tres tareas seguidas
+  del sprint (3.5b, 3.6 y 3.5c), que tuvieron que esquivarlo a mano creando
+  sus propios usuarios/datos en vez de depender del seed fijo. Emparentado
+  con el hallazgo de entorno de 3.5c arriba (mismo patrón de estado mutable a
+  nivel de módulo, ahora también en la sesión).
+- **#8** — `VITE_API_MODE` tiene default `'mock'`: un build de producción sin
+  esa variable de entorno serviría un login falso en vez de fallar.
+- **#9 a #14** — hallazgos bajos de la revisión pre-merge de 3.5a/3.5b, sin
+  detalle adicional registrado en ninguna sesión.
+- **Sin punto de entrada de logout en la UI**: el hook `useLogout` existe y
+  está testeado desde 3.1, pero ningún componente lo usa todavía.
+- **La `ir.rule` de ADR-014 está acotada a `base.group_portal`**: un usuario
+  admin (grupo Administrator, no Portal) que llamara a `/me/*` no tendría
+  ninguna restricción y vería datos de todos los usuarios. Consecuencia de
+  una decisión ya cerrada (ADR-014, para no romper el `unlink` del admin en
+  el backoffice), no de una implementación a medias — el admin no consume
+  esta API hoy.
+- **`libraryIndexSchema` y `checklistResponseSchema` sin exportar**
+  (`src/features/lists/services/lists.service.ts`): complicó reconstruirlos
+  a mano para el checkpoint de contrato B5. Conviene exportarlos antes del
+  próximo checkpoint.
+- **Sin verificación con lectores de pantalla reales**, y **sin ningún seed
+  (MSW ni Odoo) con un árbol de más de cuatro niveles** (el más profundo,
+  agregado en B2.7, es el de cuatro niveles de Alex: Favorites > All-time >
+  By decade > 2010s).
+- **Nada del sprint pasó por CI**: la rama `sprint-2-catalogo` contiene el
+  Sprint 3a entero pese al nombre, va muy por delante de `origin/main`, y la
+  CI del proyecto solo corre en `main`/`develop`.
+
+### Cierre de Sprint 3a
+
+Con 3.5c cerrado, el carril A queda 8/8 y el carril B 5/5 — **Sprint 3a
+completo**. Objetivo demo cumplido: iniciar sesión, crear y organizar listas
+propias (incluido el onboarding de listas sugeridas), ver sus entries.
+
+Lo que queda construido: auth completa (login/register/logout, OAuth
+mockeado), CRUD de checklists con árbol accesible ARIA y navegación por
+teclado, onboarding de starter lists, vista de entries en modo lectura, y del
+lado del backend real (`ll-odoo`, sin pushear) los cinco endpoints de
+`/me/*` (lectura y escritura) más el cierre de la fuga de imágenes de
+ADR-014 — validado contra el contrato Zod del frontend con un drift real
+encontrado y corregido.
+
+La deuda abierta queda consolidada en la sección de arriba; ninguna bloquea
+el cierre del sprint. **Camino crítico a partir de ahora: Sprint 3b**
+(tracking y vinculación, doc 07) — ver [README.md](./README.md) para el
+estado general del proyecto.
