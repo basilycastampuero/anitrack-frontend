@@ -1,10 +1,13 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { server } from '@/mocks/server'
 import { ChecklistTree } from '@/features/lists/components/ChecklistTree'
 import { useSessionStore } from '@/store/sessionStore'
+import { authService } from '@/features/auth/services/auth.service'
+import { STARTER_LIST_KEYS } from '@/features/lists/constants'
+import { t } from '@/i18n/en'
 import type { UserSession } from '@/features/auth/types'
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
@@ -160,13 +163,45 @@ describe('ChecklistTree', () => {
     expect(allTime).toHaveAttribute('tabindex', '0')
   })
 
-  it('estado vacío: el usuario sin listas ve el EmptyState, no un árbol vacío', async () => {
-    useSessionStore.setState({
-      user: { ...fakeUser, id: 2, odooUserId: 12, name: 'Sam Cortez', email: 'sam@example.com' },
-      status: 'authenticated',
+  it('estado vacío: el usuario sin listas ve el CTA de starter lists (doc 12 §3.5c), no un árbol vacío', async () => {
+    // Usuario nuevo registrado en el momento (id `Date.now()`, sin
+    // checklists), no `sam@example.com` fijo del seed: el seed es mutable a
+    // nivel de módulo sin reset entre tests (hallazgo #7, bitácora 13), y
+    // este archivo ya corrió mutaciones (clicks de árbol) antes de llegar
+    // acá — depender de un id fijo haría el resultado sensible al orden de
+    // ejecución dentro del archivo.
+    const user = await authService.register({
+      name: 'Onboarding Tester',
+      email: `onboarding-${Date.now()}@example.com`,
+      password: 'password123',
     })
+    useSessionStore.setState({ user, status: 'authenticated' })
+
     renderTree()
 
-    await waitFor(() => expect(screen.queryByRole('tree')).not.toBeInTheDocument())
-  })
+    // Espera a que la carga real termine (no solo a que "tree" esté ausente
+    // en el primer render, que también es cierto durante el skeleton).
+    const cta = await screen.findByRole('button', {
+      name: t.lists.starterListsPrompt.cta,
+    })
+    expect(screen.queryByRole('tree')).not.toBeInTheDocument()
+
+    const author = userEvent.setup()
+    await author.click(cta)
+
+    // Las cinco aparecen, en el orden de STARTER_LIST_KEYS, y el CTA ya no
+    // está (CA: "el CTA no vuelve a aparecer") — es el árbol tomando la
+    // rama `else` de `ChecklistTree` en cuanto `tree.length > 0`. Timeout
+    // extendido: cinco POST secuenciales de 300ms (~1.5s) superan el
+    // default de `findByRole` (1s).
+    const tree = await screen.findByRole('tree', undefined, { timeout: 4000 })
+    STARTER_LIST_KEYS.forEach((key) => {
+      expect(
+        within(tree).getByRole('treeitem', { name: t.lists.starterLists[key] }),
+      ).toBeInTheDocument()
+    })
+    expect(
+      screen.queryByRole('button', { name: t.lists.starterListsPrompt.cta }),
+    ).not.toBeInTheDocument()
+  }, 8000)
 })

@@ -154,8 +154,24 @@ export const en = {
   lists: {
     title: 'My Lists',
     treeLabel: 'Your checklists',
-    treeEmptyTitle: 'No lists yet',
-    treeEmptyBody: 'Lists you create will show up here.',
+    /** Etiquetas visibles de las cinco listas sugeridas (doc 12 §3.5c,
+     * ADR-003). Las claves son las de `STARTER_LIST_KEYS`
+     * (`src/features/lists/constants.ts`) — el valor es también el nombre
+     * real que recibe la checklist al crearse, no solo un label de UI. */
+    starterLists: {
+      watching: 'Watching',
+      completed: 'Completed',
+      onHold: 'On Hold',
+      dropped: 'Dropped',
+      planToWatch: 'Plan to Watch',
+    },
+    starterListsPrompt: {
+      title: 'Start tracking in one click',
+      body: 'Create five starter lists — Watching, Completed, On Hold, Dropped, Plan to Watch — to sort your entries right away.',
+      cta: 'Create starter lists',
+      creating: 'Creating…',
+      errorFallback: 'Could not create the starter lists. Try again.',
+    },
     selectPromptTitle: 'Select a list',
     selectPromptBody: 'Choose a list on the left to see what is in it.',
     entriesEmptyTitle: 'This list is empty',

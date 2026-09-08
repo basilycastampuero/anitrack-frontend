@@ -1,11 +1,11 @@
 import { useState, type ReactNode } from 'react'
 import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { EmptyState } from '@/components/common/EmptyState'
 import { ErrorState } from '@/components/common/ErrorState'
 import { LoadingSkeleton } from '@/components/common/LoadingSkeleton'
 import { ChecklistFormDialog } from '@/features/lists/components/ChecklistFormDialog'
 import { ChecklistTreeItem } from '@/features/lists/components/ChecklistTreeItem'
+import { StarterListsPrompt } from '@/features/lists/components/StarterListsPrompt'
 import { useChecklists } from '@/features/lists/hooks/useChecklists'
 import { useCreateChecklist } from '@/features/lists/hooks/useCreateChecklist'
 import { useTreeNavigation } from '@/features/lists/hooks/useTreeNavigation'
@@ -43,7 +43,9 @@ export function ChecklistTree({ selectedId, onSelect, className }: ChecklistTree
   } else if (checklists.isError) {
     body = <ErrorState onRetry={() => checklists.refetch()} />
   } else if (tree.length === 0) {
-    body = <EmptyState title={t.lists.treeEmptyTitle} description={t.lists.treeEmptyBody} />
+    // Onboarding (doc 12 §3.5c, ADR-003): un usuario sin ninguna checklist ve
+    // el CTA de starter lists en vez del EmptyState genérico.
+    body = <StarterListsPrompt />
   } else {
     body = (
       <ul role="tree" aria-label={t.lists.treeLabel} className="space-y-0.5">
