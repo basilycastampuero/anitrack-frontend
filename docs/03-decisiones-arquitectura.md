@@ -651,3 +651,131 @@ para dar el sprint por cerrado. Tercera consecuencia: el Odoo local tiene
 catálogo sembrado pero **cero listas de usuario**, así que extender
 `scripts/seed-odoo.mjs` con un usuario portal y sus listas deja de ser
 opcional y entra al plan como tarea del carril B.
+
+---
+
+## ADR-018 — `aggregatedProgress` se recalcula como dato estructurado en el controlador, y la equivalencia con `link_show_name` se testea
+
+**Contexto.** El contrato (doc 04) define
+`aggregatedProgress: { groups: { abbreviation, watched, total }[] }` y dice
+explícitamente que llega **pre-calculado**: el frontend no recalcula la
+agregación, solo la formatea (`progress.ts`, tarea 3.6). Del lado de Odoo esa
+lógica ya existe, pero como **string formateado**:
+`ll.checklist.link.compute_show_name` (`ll_checklist/models/database/link.py`)
+produce `"Spy x Family [S1 25/25] - [S2 03/-]"` y, de paso, escribe ese texto
+en `link_record_id.checklist_name`.
+
+Verificado contra el Odoo local (2026-09-08, DB `anitrack`) creando a mano un
+franchise-link con dos version-links: `link_show_name` quedó exactamente
+`"Spy x Family [S1 25/25] - [S2 03/-]"`, con el mismo formato que espera
+`progress.ts`. La lógica real, leída del código, es: agrupar por
+`lv_abbreviation` (clave `""` si está vacía), sumar `lv_episodes` por grupo,
+sumar `version_episodes` **salvo** que alguna versión del grupo tenga
+`version_episodes <= 0`, en cuyo caso el total del grupo entero pasa a
+desconocido (`-1`, que se imprime `-`), y ordenar los grupos por el
+`lv_record_order` **mínimo** del grupo.
+
+**Alternativas consideradas.**
+
+1. **Devolver el string de `link_show_name` y parsearlo en el frontend.**
+   Descartada: contradice el contrato (el frontend dejaría de recibir dato y
+   pasaría a recibir presentación), obliga a un parser de un formato que
+   nadie versiona, y rompe en cuanto un `link_name` contenga un `[` o un
+   ` - `. Además el string mezcla el nombre del entry con su progreso.
+2. **Llamar a `compute_show_name` desde el controlador y derivar los grupos
+   de su resultado.** Descartada por dos motivos: el método no devuelve
+   nada estructurado (asigna a `link_show_name`), y **tiene un efecto
+   secundario**: reescribe `link_record_id.checklist_name`. Un endpoint de
+   lectura no puede permitirse escribir en la base.
+3. **[Elegida]** Replicar la agregación en `api_lists.py` como función pura
+   sobre los campos del link (`lv_abbreviation`, `lv_episodes`,
+   `lv_version_episodes`, `lv_record_order`), emitiendo los grupos como dato,
+   y **testear la equivalencia**: formatear los grupos con el mismo formato
+   de Chano y comparar contra `link_show_name` del mismo registro.
+
+**Decisión.** Opción 3. La función vive en `api_lists.py`, documenta en su
+docstring de qué método es espejo, y el mapeo al contrato es:
+`total = 0` cuando el grupo quedó en desconocido (el contrato ya define
+`0 => desconocido`, igual que `version_episodes`), y `abbreviation = ""`
+cuando el link no tiene abreviatura (el contrato la tipa `string`, no
+`string | null`).
+
+**Consecuencias.** Positiva: el contrato se cumple sin adaptador y sin
+efectos secundarios en una ruta GET; el frontend recibe dato, no
+presentación. Negativa: hay **dos** implementaciones de la misma regla de
+negocio (la de Chano y la nuestra) y pueden divergir en silencio si él cambia
+la suya — es el mismo riesgo de drift que ADR-017 mitiga para el contrato,
+aplicado acá a una regla de dominio. Mitigación concreta y barata: el test de
+equivalencia contra `link_show_name` es el detector; si Chano cambia su
+lógica, ese test se pone rojo y el drift se ve, en vez de aparecer como un
+progreso mal sumado en la UI.
+
+---
+
+## ADR-019 — En `/me/*`, el catálogo se lee por campos *related* del link; el `sudo()` explícito queda para el único dato que no tiene related
+
+**Contexto.** ADR-014 fijó la regla "privado ⇒ ORM del usuario, nunca
+`sudo()`", con una excepción declarada: leer catálogo ya público dentro de
+esos endpoints. Faltaba saber **qué** exactamente hace falta leer del
+catálogo para armar un `ListEntry` (doc 04) y cuánto `sudo()` cuesta.
+
+Verificado contra el Odoo local (2026-09-08) con el usuario portal
+`portaltest@anitrack.dev` y las reglas de `ll_webpage/security/portal_access.xml`
+ya instaladas:
+
+- Acceso **directo** a `ll.checklist.version`, `content`, `franchise`,
+  `db.name` e `image` ⇒ `AccessError`, como esperaba ADR-014.
+- Un `search` sobre `ll.checklist.link` cuyo **dominio atraviesa** al
+  catálogo (`[('link_version_id.version_episodes','>',0)]`) ⇒ también
+  `AccessError`: Odoo aplica las ACL del modelo atravesado.
+- Pero los campos **related** del propio link **sí** se leen sin error:
+  `lv_version_episodes` (related a `version_episodes`), `link_image_binary`
+  (related a la imagen), `link_description`, `lv_record_order`. Es el
+  comportamiento por defecto de los campos related en Odoo, que se computan
+  con `sudo()` salvo que se declare lo contrario.
+- Y un `read()` de un Many2one a catálogo (`link_version_id`,
+  `link_franchise_id`) devuelve `[id, display_name]` sin `AccessError`.
+
+O sea: **el modelo de Chano ya expone, por diseño, el subconjunto de catálogo
+que un link necesita**, y lo hace saltando la ACL sin que el controlador pida
+nada. Eso no es un agujero (son datos de catálogo, públicos por ADR-010) pero
+sí es un supuesto que conviene dejar escrito, porque no es evidente leyendo
+`portal_access.xml`.
+
+**Alternativas consideradas.**
+
+1. Dar ACL de lectura de catálogo al grupo Portal. Descartada: ADR-014 ya la
+   descartó ("Ninguna ACL de catálogo para Portal") y no hace falta — el
+   catálogo se sirve por el controlador público de ADR-010.
+2. `sudo()` sobre el link entero dentro de `/me/*` para no pensar en qué se
+   puede leer y qué no. Descartada: es exactamente lo que ADR-014 prohíbe, y
+   apagaría la `ir.rule` que garantiza el aislamiento entre usuarios.
+3. **[Elegida]** Leer todo lo que se pueda por campos del propio link
+   (related incluidos) con `request.env`, y usar `sudo()` explícito
+   **solo** para `version.version_content_id` (el `contentId` del contrato),
+   que es el único dato que el link no expone por related.
+
+**Decisión.** Opción 3, con tres reglas para `api_lists.py`:
+
+1. Ningún dominio de `search` en `/me/*` atraviesa a un modelo de catálogo —
+   filtra siempre por campos propios del link o de la checklist. (No es una
+   preferencia de estilo: falla con `AccessError`.)
+2. El único `sudo()` del archivo es una lectura en lote de
+   `ll.checklist.version` → `version_content_id`, hecha por el helper
+   `_catalog(model)` que doc 12 ya prevé, sobre los ids que salieron de links
+   que la `ir.rule` ya validó como del usuario. Nunca se usa un id que venga
+   del request.
+3. Si un endpoint futuro necesita más catálogo (nombres alternativos,
+   plataformas), se agrega a ese mismo helper y se justifica ahí, no se
+   dispersa un `.sudo()` por el archivo.
+
+**Consecuencias.** Positiva: el aislamiento entre usuarios lo sigue haciendo
+el ORM, hay un solo `sudo()` auditable, y no se toca `ll_checklist` para
+agregar related nuevos. Negativa: la superficie del `/me/*` depende de qué
+campos related tenga hoy el modelo de Chano; si él borra o cambia
+`lv_version_episodes` a `related_sudo=False`, el endpoint pasa de funcionar a
+tirar `AccessError` — falla ruidosa, que es el modo correcto, y queda cubierta
+por el checkpoint B5. Segunda consecuencia: `/api/v1/images/<id>` sigue siendo
+la URL que emiten los entries, porque las imágenes de un link son siempre
+imágenes de catálogo (la del franchise o la del content); la ruta privada que
+introduce B4 es solo para imágenes que el usuario suba a una checklist propia.
