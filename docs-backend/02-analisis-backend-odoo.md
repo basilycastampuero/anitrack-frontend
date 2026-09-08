@@ -175,6 +175,56 @@ erDiagram
 | Auth | ✅ | OAuth Twitch + usuarios Odoo; falta flujo para SPA |
 | API para el frontend | ❌ | **No existe nada. Es el bloqueo principal.** |
 
+## Hallazgos verificados leyendo el código (Sprint 3a, carril B — 2026-09-08)
+
+Confirmados directamente contra `odoo-modules/ll_checklist` durante B2/B3
+(bitácora completa: [`../docs/13-sprint3a-avance.md`](../docs/13-sprint3a-avance.md)).
+No vienen de una respuesta de Chano — mismo criterio que las preguntas
+`[VERIFICADO]` de [08-preguntas-backend.md](./08-preguntas-backend.md).
+
+1. **`checklist_database` (bool)**: `True` = registro "sombra", una
+   proyección de un link creada por el wizard de vinculación (no una carpeta
+   que el usuario haya creado a propósito); `False` = carpeta real del
+   usuario. Las propias vistas de Chano ya filtran con
+   `('checklist_database', '!=', True)` (`views/wizard/link.xml:92`,
+   `views/database/link.xml:43`) — el mismo criterio que usa el backend REST
+   propio (`api_lists.py`) para armar el árbol de `/me/checklists`.
+2. **`link_type` no sirve para distinguir un entry suelto de uno agrupado.**
+   Vale `"F"` (Franchise Link) tanto para el franchise-link contenedor como
+   para sus version-links hijos (ver `compute_type`,
+   `models/database/link.py:219-222`) — hay que mirar `link_version_id`
+   (presente solo en la hoja) para saber si un registro es la entrada
+   agrupadora o un hijo.
+3. **`Checklist.extra_order()` está roto**
+   (`models/checklist.py:120-126`): calcula el nombre de campo correcto en
+   la variable local `order` (`"checklist_order"` o `"checklist_name"`
+   según `checklist_sorting_mode`) pero el `return` es `custom_order` — el
+   modo `"C"`/`"N"` en sí, no un nombre de campo utilizable para ordenar.
+4. **`ll.checklist.user.extra_get_user(self, uid)` no lleva `@api.model`**
+   (`models/user.py:72-80`). Por RPC (XML-RPC/JSON-RPC externo, no desde
+   dentro de Odoo) el primer elemento posicional de `args` se ata a `self`
+   en lugar de a `uid` — hay que anteponer una lista de ids vacía
+   (`[[], uid]`). Dentro de un controlador (`request.env[...]`) esto no se
+   nota porque `self` ya viene resuelto por el framework.
+5. **`compute_show_name` escribe en la base como efecto secundario**
+   (`models/database/link.py:234-245`): al crearse o modificarse un link,
+   reescribe `link_record_id.checklist_name` (la sombra) con el nombre más
+   el progreso formateado (ej. `"Season 1 [25/25]"`). Consecuencia práctica:
+   cualquier código que necesite crear/ubicar una sombra de forma idempotente
+   **no puede** buscarla por su nombre original — ese nombre deja de existir
+   apenas se crea el link. Ver la sección de B2 en la bitácora del Sprint 3a
+   para el caso real que esto rompió.
+6. **`ondelete` asimétrico entre dos relaciones clave**: `link_franchise_id`
+   es `ondelete="restrict"` (`models/database/link.py:96-99`) — borrar una
+   franquicia con links vivos falla en vez de arrastrarlos; mientras que
+   `user_res_user_id` en `ll.checklist.user` es `ondelete="set null"`
+   (`models/user.py:37-40`), no cascade — borrar el `res.users` deja el
+   perfil huérfano (con todas sus checklists y links todavía vivos) en vez
+   de limpiarlo. Ninguna de las dos relaciones arrastra en cascada al
+   borrarse desde "arriba"; cualquier script de seed/reset tiene que
+   ordenar los borrados a mano (perfil → usuario → catálogo) y barrer
+   huérfanos, no asumir que borrar el padre alcanza.
+
 ## Riesgos detectados
 
 1. **Sin API**: el dev backend tiene que escribir controladores HTTP (o exponer

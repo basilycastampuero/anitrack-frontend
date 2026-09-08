@@ -336,6 +336,14 @@ refleja sin rebuild o `docker cp` + `odoo -u ll_webpage --stop-after-init`.
 Cambiar `security/*.xml` **exige** actualizar el módulo (`-u ll_webpage`), no
 alcanza con reiniciar.
 
+> **Actualización (2026-09-08, B2/B3):** `docker-compose.yml` ahora monta
+> `./ll-odoo/odoo-modules:/app/odoo-modules` como bind mount rw — editar
+> `ll-odoo/` se refleja en el contenedor sin `docker cp` ni rebuild. Sigue
+> haciendo falta `docker compose --profile backend restart odoo` tras tocar
+> Python/rutas (la routing map de Odoo se arma al arrancar); cambiar
+> `security/*.xml` sigue exigiendo `-u <módulo>` (mecánica de Odoo para datos
+> XML, independiente del mount).
+
 **CA:** login de un usuario portal devuelve `UserSession` y cookie con
 `SameSite=Lax`; `me` sin cookie da `401` con el sobre del contrato; un POST sin
 `X-Requested-With` da `403`; el admin sigue pudiendo borrar checklists desde el

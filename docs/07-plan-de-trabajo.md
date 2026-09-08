@@ -67,7 +67,7 @@ contenido → versiones), buscar, filtrar. Todo con MSW.
 | 2.5 | Detalle contenido | Ruta propia/modal-route | Deep-link directo funciona | ✅ ruta propia (no modal-route) reutilizando `ContentSection` sin auto-enlace; deep-link directo probado — detalle en [10-sprint2-avance.md](./10-sprint2-avance.md) |
 | 2.6 | SearchBar global | Debounce + dropdown + teclado + página resultados | Test de debounce e interacción | ✅ combobox accesible (patrón ARIA APG, hecho a mano — ver ADR-013) + `/search` reutilizando grid y filtros del catálogo. Brecha conocida: el buscador mobile no es colapsable inline, sigue navegando a `/search` como en Sprint 1 — detalle en [10-sprint2-avance.md](./10-sprint2-avance.md) |
 | 2.7 | Galería de imágenes | Colapsable, lazy | — | ✅ bloque colapsable en `FranchiseDetailPage` sobre `franchise.gallery` (ya llegaba del contrato, no se usaba); lazy real: las `<img>` no se montan mientras está colapsada — detalle en [10-sprint2-avance.md](./10-sprint2-avance.md) |
-| 2.8 | ⚠️ Spike integración real | Probar 1 endpoint real (franchises) vía proxy de Vite contra el **Odoo local** (`docker compose --profile backend up`) | Decisión documentada: adaptador necesario sí/no | ✅ **No hace falta adaptador**: se escribió un controlador REST propio en `ll-odoo` (rama `anitrack/rest-catalog-api`, sin commitear/pushear) que emite directo el contrato del doc 04; 7/7 respuestas reales validadas contra los esquemas Zod del frontend. Matiz: la traducción no desapareció, se movió a Python del lado del backend — detalle completo en [11-spike-integracion-real.md](./11-spike-integracion-real.md) |
+| 2.8 | ⚠️ Spike integración real | Probar 1 endpoint real (franchises) vía proxy de Vite contra el **Odoo local** (`docker compose --profile backend up`) | Decisión documentada: adaptador necesario sí/no | ✅ **No hace falta adaptador**: se escribió un controlador REST propio en `ll-odoo` (rama `anitrack/rest-catalog-api`, commiteado, sin pushear) que emite directo el contrato del doc 04; 7/7 respuestas reales validadas contra los esquemas Zod del frontend. Matiz: la traducción no desapareció, se movió a Python del lado del backend — detalle completo en [11-spike-integracion-real.md](./11-spike-integracion-real.md) |
 
 **Conceptos:** searchParams como estado; `keepPreviousData`/`placeholderData`
 para paginación sin parpadeo; prefetch on-hover de cards.
@@ -130,7 +130,7 @@ entries (todavía sin poder modificar progreso).
 | 3.5c | Onboarding "starter lists" | EmptyState con CTA que crea Watching / Completed / On Hold / Dropped / Plan to Watch (ADR-003) | Usuario sin listas ve el CTA; al aceptar quedan las 5 listas y el árbol se puebla |
 | 3.6 | Vista de entries | `ListEntryRow` + `FranchiseEntryGroup` + `ProgressBar`, en modo **lectura** (el stepper es 3.7) | Dado un `aggregatedProgress` del contrato, el grupo renderiza `[S1 12/12] - [S2 03/-]`; hay test del caso "total desconocido" y del entry suelto |
 
-#### Carril B — backend en `ll-odoo` (rama `anitrack/rest-auth-lists`, nunca se pushea al remoto de Chano)
+#### Carril B — backend en `ll-odoo` (rama `anitrack/rest-catalog-api`, nunca se pushea al remoto de Chano)
 
 | # | Tarea | Detalle | CA |
 |---|---|---|---|
