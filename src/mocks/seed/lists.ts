@@ -74,7 +74,31 @@ export const checklistsByUser: Record<number, ChecklistNode[]> = {
           sortingMode: 'C',
           isPublished: false,
           linkCount: 1,
-          children: [],
+          children: [
+            {
+              id: 5,
+              name: 'By decade',
+              description: null,
+              imageUrl: null,
+              order: 1,
+              sortingMode: 'C',
+              isPublished: false,
+              linkCount: 0,
+              children: [
+                {
+                  id: 6,
+                  name: '2010s',
+                  description: null,
+                  imageUrl: null,
+                  order: 0,
+                  sortingMode: 'C',
+                  isPublished: false,
+                  linkCount: 1,
+                  children: [],
+                },
+              ],
+            },
+          ],
         },
       ],
     },
@@ -208,12 +232,41 @@ export const entriesByChecklist: Record<number, ListEntry[]> = {
       finishedAt: '2023-07-10',
     },
   ],
+  /**
+   * "By decade" (id 5) es un nodo intermedio sin entries propios — solo
+   * agrupa "2010s". Existe para que el árbol tenga una rama de 4 niveles
+   * real (Favorites > All-time > By decade > 2010s), no solo en el catálogo
+   * de Odoo del seed del carril B (ver scripts/seed-odoo.mjs).
+   */
+  6: [
+    {
+      linkId: 5006,
+      kind: 'version',
+      displayName: 'Steins;Gate',
+      imageUrl: '/mock-images/poster-7.svg',
+      order: 0,
+      contentType: 'V',
+      franchiseId: 9,
+      notes: null,
+      version: {
+        versionId: 1016,
+        contentId: 112,
+        abbreviation: 'SG',
+        watchedEpisodes: 24,
+        totalEpisodes: 24,
+        isSynced: false,
+      },
+      rating: 9,
+      startedAt: '2023-02-01',
+      finishedAt: '2023-02-20',
+    },
+  ],
 }
 
 export const libraryIndexByUser: Record<number, LibraryIndex> = {
   1: {
-    versionIds: [1005, 1017, 1018, 1010, 1000],
-    franchiseIds: [3, 10, 5, 1],
+    versionIds: [1005, 1017, 1018, 1010, 1000, 1016],
+    franchiseIds: [3, 10, 5, 1, 9],
   },
   2: { versionIds: [], franchiseIds: [] },
 }
@@ -225,9 +278,9 @@ export const profilesByUser: Record<number, PublicProfile> = {
     name: 'Alex Rivera',
     avatarUrl: '/mock-images/avatar-1.svg',
     stats: {
-      totalEntries: 4,
-      totalEpisodesWatched: 104,
-      byContentType: { games: 0, videos: 4 },
+      totalEntries: 5,
+      totalEpisodesWatched: 128,
+      byContentType: { games: 0, videos: 5 },
     },
     publishedChecklists: checklistsByUser[1]!.filter((c) => c.isPublished),
   },
