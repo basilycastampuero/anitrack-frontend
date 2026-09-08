@@ -161,6 +161,9 @@ export const en = {
     entriesEmptyTitle: 'This list is empty',
     entriesEmptyBody: 'Nothing has been added to this list yet.',
     newList: 'New list',
+    entry: {
+      synced: 'Synced',
+    },
     menu: {
       trigger: (name: string) => `Actions for ${name}`,
       rename: 'Rename',

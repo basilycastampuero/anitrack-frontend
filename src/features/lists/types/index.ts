@@ -97,3 +97,16 @@ export interface LibraryIndex {
   versionIds: number[]
   franchiseIds: number[]
 }
+
+/**
+ * Type guard (tarea 3.6): `ListEntry` no es una unión discriminada en TS
+ * (kind y version son campos independientes), pero el contrato (doc 04)
+ * garantiza que `kind === "version"` siempre trae `version`. Narrowar así
+ * evita `!`/`as` en los componentes de solo lectura (`ListEntryRow`,
+ * `ChecklistEntries`) al elegir entre fila suelta y grupo de franquicia.
+ */
+export function isVersionEntry(
+  entry: ListEntry,
+): entry is ListEntry & { kind: 'version'; version: NonNullable<ListEntry['version']> } {
+  return entry.kind === 'version' && entry.version != null
+}
