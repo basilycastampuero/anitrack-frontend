@@ -37,8 +37,8 @@ export function normalizeError(error: unknown): ApiError {
     const status = error.response?.status ?? null
     const parsed = errorEnvelopeSchema.safeParse(error.response?.data)
     if (parsed.success) {
-      const { code, message, existing } = parsed.data.error
-      return new ApiError(code, message, status, existing ?? null)
+      const { code, message, existing, field } = parsed.data.error
+      return new ApiError(code, message, status, existing ?? null, field ?? null)
     }
     if (status === null) {
       return new ApiError('INTERNAL', 'Network error', null)
@@ -53,7 +53,13 @@ export function createHttpClient(): AxiosInstance {
   const client = axios.create({
     baseURL: env.apiBaseUrl,
     withCredentials: true, // ADR-005: la sesión viaja por cookie
-    headers: { Accept: 'application/json' },
+    headers: {
+      Accept: 'application/json',
+      // ADR-016: defensa CSRF por header custom. Sin esto, el backend real
+      // responde 403 FORBIDDEN a cualquier POST/PATCH/DELETE (GET no lo exige,
+      // pero se manda siempre para no tener que distinguir por método acá).
+      'X-Requested-With': 'anitrack',
+    },
   })
 
   client.interceptors.response.use(

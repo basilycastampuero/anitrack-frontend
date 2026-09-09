@@ -5,8 +5,10 @@ import type { ChecklistNode, ListEntry } from '@/features/lists/types'
 import { genres, platforms, companies } from '@/mocks/seed/masters'
 import { franchises, allContents } from '@/mocks/seed/franchises'
 import { filterFranchises, searchHits } from '@/mocks/seed/derive'
+import type { UserSession } from '@/features/auth/types'
 import {
   users,
+  mockCredentials,
   checklistsByUser,
   entriesByChecklist,
   libraryIndexByUser,
@@ -17,7 +19,18 @@ const BASE = '/api/v1'
 const url = (path: string) => `${BASE}${path}`
 
 /** Sesión mock en memoria. Default: usuario 1 logueado (mejor demo). */
-let currentUserId: number | null = 1
+const DEFAULT_MOCK_USER_ID = 1
+let currentUserId: number | null = DEFAULT_MOCK_USER_ID
+
+/**
+ * Restaura la sesión mock al usuario logueado por default. `currentUserId` es
+ * estado mutable a nivel de módulo (deuda #7, bitácora 13): sin esto, un test
+ * que hace login/logout/register queda "logueado" para el resto de los tests
+ * del mismo archivo. Se usa junto a `resetListsSeed` desde `@/mocks/reset`.
+ */
+export function resetMockSession(): void {
+  currentUserId = DEFAULT_MOCK_USER_ID
+}
 
 const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
   UNAUTHORIZED: 401,
@@ -75,6 +88,37 @@ function parseFilters(request: Request): CatalogFilters {
 
 function requireUser(): number | null {
   return currentUserId
+}
+
+/**
+ * `checklistsByUser` es un árbol (doc 04: `children` anida sub-carpetas), no
+ * una lista plana. Buscar/borrar solo en el nivel superior deja fuera
+ * cualquier nodo anidado (p. ej. el seed tiene "All-time" bajo "Favorites",
+ * ver `mocks/seed/lists.ts`) — estos dos helpers recorren el árbol completo,
+ * los usan PATCH, DELETE y POST (para `parentId`).
+ */
+function findChecklistNode(nodes: ChecklistNode[], id: number): ChecklistNode | null {
+  for (const node of nodes) {
+    if (node.id === id) return node
+    const found = findChecklistNode(node.children, id)
+    if (found) return found
+  }
+  return null
+}
+
+/** Quita el nodo `id` de donde esté en el árbol (in-place). `true` si lo encontró. */
+function removeChecklistNode(nodes: ChecklistNode[], id: number): boolean {
+  const index = nodes.findIndex((n) => n.id === id)
+  if (index !== -1) {
+    nodes.splice(index, 1)
+    return true
+  }
+  return nodes.some((n) => removeChecklistNode(n.children, id))
+}
+
+/** El propio id de `node` más el de todos sus descendientes (recursivo). */
+function collectSubtreeIds(node: ChecklistNode): number[] {
+  return [node.id, ...node.children.flatMap(collectSubtreeIds)]
 }
 
 export const handlers = [
@@ -149,10 +193,15 @@ export const handlers = [
   // ---- Auth ----
   http.post(url('/auth/login'), async ({ request }) => {
     await delay(300)
+    const err = injectedError(request)
+    if (err) return err
     const body = (await request.json()) as { login?: string; password?: string }
-    const user = users.find((u) => u.email === body.login) ?? users[0]!
-    if (!body.password) {
-      return errorResponse('UNAUTHORIZED', 'Invalid credentials')
+    const user = users.find((u) => u.email === body.login)
+    const validPassword = !!user && mockCredentials[user.email] === body.password
+    // Mensaje genérico a propósito (doc 12 §5, 3.2): no le regalamos a nadie
+    // si el email existe o no.
+    if (!user || !validPassword) {
+      return errorResponse('UNAUTHORIZED', 'Invalid email or password')
     }
     currentUserId = user.id
     return HttpResponse.json({ user })
@@ -174,14 +223,29 @@ export const handlers = [
 
   http.post(url('/auth/register'), async ({ request }) => {
     await delay(300)
-    const body = (await request.json()) as { name?: string; email?: string }
-    const user = {
-      id: 99,
-      odooUserId: 99,
-      name: body.name ?? 'New User',
-      email: body.email ?? 'new@example.com',
+    const err = injectedError(request)
+    if (err) return err
+    const body = (await request.json()) as {
+      name?: string
+      email?: string
+      password?: string
+    }
+    if (!body.name || !body.email || !body.password) {
+      return errorResponse('VALIDATION', 'Name, email and password are required')
+    }
+    if (users.some((u) => u.email === body.email)) {
+      return errorResponse('VALIDATION', 'Email is already registered', {
+        field: 'email',
+      })
+    }
+    const user: UserSession = {
+      id: Date.now(),
+      odooUserId: Date.now(),
+      name: body.name,
+      email: body.email,
       avatarUrl: null,
     }
+    mockCredentials[user.email] = body.password
     currentUserId = user.id
     users.push(user)
     return HttpResponse.json({ user }, { status: 201 })
@@ -198,39 +262,66 @@ export const handlers = [
 
   http.post(url('/me/checklists'), async ({ request }) => {
     await delay(300)
-    const id = requireUser()
-    if (!id) return errorResponse('UNAUTHORIZED', 'Login required')
-    const body = (await request.json()) as Partial<ChecklistNode>
+    const err = injectedError(request)
+    if (err) return err
+    const uid = requireUser()
+    if (!uid) return errorResponse('UNAUTHORIZED', 'Login required')
+    const body = (await request.json()) as Partial<ChecklistNode> & { parentId?: number }
+    const roots = checklistsByUser[uid] ?? []
+    const parent = body.parentId ? findChecklistNode(roots, body.parentId) : null
+    if (body.parentId && !parent) {
+      return errorResponse('NOT_FOUND', 'Parent checklist not found')
+    }
+    const siblings = parent ? parent.children : roots
     const checklist: ChecklistNode = {
       id: Date.now(),
       name: body.name ?? 'New list',
       description: body.description ?? null,
       imageUrl: null,
-      order: (checklistsByUser[id]?.length ?? 0) + 1,
+      order: siblings.length,
       sortingMode: body.sortingMode ?? 'C',
       isPublished: body.isPublished ?? false,
       children: [],
       linkCount: 0,
     }
-    checklistsByUser[id] = [...(checklistsByUser[id] ?? []), checklist]
+    if (parent) {
+      parent.children = [...parent.children, checklist]
+    } else {
+      checklistsByUser[uid] = [...roots, checklist]
+    }
     return HttpResponse.json({ checklist }, { status: 201 })
   }),
 
   http.patch(url('/me/checklists/:id'), async ({ request, params }) => {
     await delay(200)
+    const err = injectedError(request)
+    if (err) return err
     const uid = requireUser()
     if (!uid) return errorResponse('UNAUTHORIZED', 'Login required')
-    const list = (checklistsByUser[uid] ?? []).find(
-      (c) => c.id === Number(params.id),
-    )
+    const list = findChecklistNode(checklistsByUser[uid] ?? [], Number(params.id))
     if (!list) return errorResponse('NOT_FOUND', 'Checklist not found')
     Object.assign(list, await request.json())
     return HttpResponse.json({ checklist: list })
   }),
 
-  http.delete(url('/me/checklists/:id'), async () => {
+  http.delete(url('/me/checklists/:id'), async ({ request, params }) => {
     await delay(200)
-    if (!requireUser()) return errorResponse('UNAUTHORIZED', 'Login required')
+    const err = injectedError(request)
+    if (err) return err
+    const uid = requireUser()
+    if (!uid) return errorResponse('UNAUTHORIZED', 'Login required')
+    const id = Number(params.id)
+    // El backend real cascadea sub-carpetas y links (`ondelete='cascade'`,
+    // ver useDeleteChecklist.ts): hay que borrar los entries de TODO el
+    // subárbol, no solo los del nodo apuntado, o quedan huérfanos accesibles
+    // por un id de checklist que ya no existe (#5 de la revisión).
+    const node = findChecklistNode(checklistsByUser[uid] ?? [], id)
+    const removed = removeChecklistNode(checklistsByUser[uid] ?? [], id)
+    if (!removed) return errorResponse('NOT_FOUND', 'Checklist not found')
+    const idsToClean = node ? collectSubtreeIds(node) : [id]
+    for (const cleanId of idsToClean) {
+      delete entriesByChecklist[cleanId]
+    }
     return new HttpResponse(null, { status: 204 })
   }),
 

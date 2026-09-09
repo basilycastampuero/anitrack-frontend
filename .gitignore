@@ -28,3 +28,9 @@ coverage
 *.njsproj
 *.sln
 *.sw?
+
+
+# Memoria de trabajo de los agentes de Claude Code: son notas de la herramienta,
+# no del proyecto. Lo que vale de ahí se levanta a docs/ (los gotchas de Radix
+# Tooltip y de scrollHeight en jsdom viven en docs/10-sprint2-avance.md).
+.claude/agent-memory/

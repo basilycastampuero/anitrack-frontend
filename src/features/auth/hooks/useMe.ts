@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { authService } from '@/features/auth/services/auth.service'
+import { authKeys } from '@/features/auth/hooks/queryKeys'
 import { useSessionStore } from '@/store/sessionStore'
 import { ApiError } from '@/types/api.types'
 
@@ -13,7 +14,7 @@ export function useMe() {
   const clearSession = useSessionStore((s) => s.clearSession)
 
   const query = useQuery({
-    queryKey: ['auth', 'me'],
+    queryKey: authKeys.me(),
     queryFn: () => authService.me(),
     retry: (count, error) =>
       error instanceof ApiError && error.code === 'UNAUTHORIZED'
@@ -23,9 +24,12 @@ export function useMe() {
   })
 
   useEffect(() => {
-    if (query.data) setUser(query.data)
-    else if (query.isError) clearSession()
-  }, [query.data, query.isError, setUser, clearSession])
+    // Gatear por estado, no por presencia de `data`: en v5 `data` sobrevive
+    // a la transición a error (retiene el último valor bueno), así que
+    // chequear `isError` primero evita reautenticar con un usuario vencido.
+    if (query.isError) clearSession()
+    else if (query.isSuccess) setUser(query.data)
+  }, [query.isSuccess, query.isError, query.data, setUser, clearSession])
 
   return query
 }

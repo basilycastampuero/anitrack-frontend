@@ -1,6 +1,11 @@
 # 04 — Contrato de API v1
 
-> Este contrato es lo que MSW mockea y lo que se le propone al dev de Odoo.
+> Este contrato es la especificación de la API: qué forma tiene cada request
+> y cada respuesta. Es lo que MSW mockea, y buena parte ya está implementada
+> y verificada contra el backend real de Chano (`ll-odoo`) — el estado de
+> esa implementación (qué está construido, dónde, qué falta) vive aparte, en
+> [`../docs-backend/14-resumen-implementacion-api.md`](../docs-backend/14-resumen-implementacion-api.md),
+> no en este documento.
 > Prefijo: `/api/v1`. Formato: JSON. Auth: cookie de sesión Odoo (ADR-005).
 > Los campos marcados `[EXT]` son extensiones propuestas que HOY no existen en
 > el modelo Odoo (ADR-004) — el backend puede omitirlos y el frontend los
@@ -33,6 +38,19 @@
 Códigos: `UNAUTHORIZED` (401), `FORBIDDEN` (403), `NOT_FOUND` (404),
 `VALIDATION` (422), `INTERNAL` (500).
 
+`field?: string` — extensión opcional del envelope (Sprint 3a, ver
+[13-sprint3a-avance.md](./13-sprint3a-avance.md)): en un `VALIDATION`, nombra
+el campo del formulario al que refiere el error (p. ej.
+`{ "error": { "code": "VALIDATION", "message": "Email already registered", "field": "email" } }`).
+El frontend lo consume en `RegisterForm` (`error.field` → `form.setError`) si
+está ausente, el error se muestra a nivel de formulario. **Implementado en el
+backend real** (tarea B4, `ll-odoo` commit `3c4e091`): `_error(code, message,
+status, field=None)` en
+`ll-odoo/odoo-modules/ll_webpage/controllers/api_common.py` ya acepta el
+parámetro. Lo emiten `POST /me/checklists` (validaciones de `name`/`parentId`/
+`order`/`sortingMode`, y el 422 de ciclo) y `POST /auth/register` (ver más
+abajo, cerrado con el fix de la tarea B5).
+
 ---
 
 ## Auth
@@ -63,9 +81,24 @@ No es endpoint JSON: la SPA navega a
 existente de `auth_oauth` y redirige de vuelta con la cookie puesta).
 Al volver, la SPA llama `me`.
 
-### `POST /api/v1/auth/register` — ⚠️ pendiente
-El backend actual no expone signup (usuarios se crean por OAuth o backoffice).
-Pregunta 9 del doc 08. El frontend diseña la página igual; MSW la mockea.
+### `POST /api/v1/auth/register`
+Body: `{ "name": string, "email": string, "password": string }`
+→ `200 { "user": UserSession }` + cookie de sesión (el alta autentica de una,
+ADR-015). `422 VALIDATION` si falta algún campo. **`422 VALIDATION` con
+`field: "email"`** si el email ya está registrado (activo o archivado —
+verificado antes de llamar a `signup()`, con `active_test=False`, porque un
+usuario archivado sigue ocupando el login). `403 FORBIDDEN` (sin `field`) si
+el alta está deshabilitada (`auth_signup.invitation_scope = "b2b"` en esa
+base). Implementado y verificado con `curl` contra el Odoo local (tarea B5 +
+su fix, `ll-odoo` commit `b5f30a3`): antes de este fix, el email duplicado
+devolvía `403 FORBIDDEN` con el **mensaje crudo de Postgres** (constraint,
+columna y valor duplicado) en vez de distinguirse del caso "alta
+deshabilitada" — filtración de estructura interna además de desalineamiento
+de contrato. Detalle del hallazgo y del fix en
+[13-sprint3a-avance.md](./13-sprint3a-avance.md) (sección "Actualización
+2026-09-08 — Carril B cierra completo (B4, B5) + 3.6").
+Ver pregunta 8 del doc 08 (cerrada) y 8.2 (todavía abierta: qué pasa si el
+mismo email se usa por email/clave y por Twitch).
 
 ---
 
@@ -171,6 +204,53 @@ interface SearchHit {
   contentType: "G" | "V" | null;
 }
 ```
+
+> **Hueco detectado en implementación (2026-08-31, tarea 2.6).**
+> `SearchHit` da `franchiseId` para navegar, pero no el nombre de la
+> franquicia. Para un hit `kind: "content"`, la URL con slug
+> (`/franchise/:id-:slug/content/:id-:slug`, ver `slug.ts`) necesita ese
+> nombre y no lo tiene: el frontend arma la ruta sin slug en el segmento de
+> franquicia (`/franchise/9/content/111-steins-gate-vn`). No rompe el
+> routing (solo se parsea el id inicial de cada segmento) pero la URL queda
+> menos prolija. Pendiente `[FE→BE]`, ver pregunta 12.4 en
+> [`../docs-backend/08-preguntas-backend.md`](../docs-backend/08-preguntas-backend.md).
+
+---
+
+## Imágenes
+
+Únicas rutas del contrato que no devuelven JSON: sirven el binario de la
+imagen directamente (`Content-Type` de imagen). Todos los `imageUrl` del
+resto del contrato apuntan a una de las dos.
+
+### `GET /api/v1/images/:id` (pública)
+Portada o imagen de galería de un ítem de **catálogo**. Exige que la imagen
+pertenezca a un `franchise`/`content` **publicado** (portada directa o de
+galería de una franquicia publicada, o portada de un content publicado cuya
+franquicia también lo esté) → `404` si no. Cierra la deuda que ADR-014 había
+dejado documentada como abierta (ver
+[03-decisiones-arquitectura.md](./03-decisiones-arquitectura.md), ADR-014):
+antes servía cualquier `ll.checklist.image` por id, con `sudo()` y sin
+ningún filtro. Es la ruta a la que apuntan los `imageUrl` de
+`FranchiseSummary`/`FranchiseDetail`/`ContentDetail`/`VersionDetail`/
+`SearchHit`, y también el `imageUrl` de un `ListEntry`: el wizard de Odoo
+siempre llena `link_image_id` con una imagen de catálogo, nunca con una del
+usuario (ADR-019), así que las imágenes de un entry son siempre públicas.
+
+### `GET /api/v1/me/images/:id` (auth requerida)
+Contraparte privada: portada que el usuario subió a una checklist **propia**
+(`checklist_image_id`). Verifica que la imagen pertenezca a alguna checklist
+(real o "sombra") del usuario de la sesión, vía ORM del usuario (`ir.rule`
+de ADR-014) → `404` si no es suya (nunca `403`, mismo criterio que el resto
+de `/me/*`: un `403` confirmaría que el id existe). Es la ruta a la que
+apunta el `imageUrl` de un `ChecklistNode` cuando la carpeta tiene portada
+propia.
+
+Implementado en `ll-odoo` (tarea B4, commit `3c4e091`):
+`_image_in_published_catalog` en `api_catalog.py` y `_owned_image_or_none`
+en `api_lists.py`. Detalle en
+[13-sprint3a-avance.md](./13-sprint3a-avance.md) (sección "B4 — Escritura en
+`/me/*`, fuga de imágenes y `ir.rule` de copias").
 
 ---
 
@@ -297,17 +377,8 @@ Igual que `me/.../entries` pero solo si `isPublished`. `403` si no.
 
 ---
 
-## Resumen de implementación para el dev de Odoo
-
-| Endpoint | Modelo(s) Odoo | Dificultad |
-|---|---|---|
-| auth/* | `res.users` + sesión nativa | Baja (wrapper) |
-| genres/platforms/companies | masters | Trivial |
-| franchises (+detail) | franchise/content/version/name | Media (filtros) |
-| search | `db.name` | Baja |
-| me/checklists CRUD | checklist | Baja |
-| me/.../entries | link (+ agregación) | Media (reusar `compute_show_name` como dato estructurado) |
-| me/links POST | lógica de `wizard.link.action_create_link` | Media (ya está escrita, extraerla) |
-| me/links PATCH/DELETE | link (`write`/`action_remove`) | Baja |
-| library-index | link search | Trivial |
-| profiles | checklist published + agregados | Media |
+> El estado real de implementación de este contrato contra el backend de
+> Chano (qué está construido, en qué rama, qué falta y qué se verificó) no
+> vive en este documento — este archivo es solo la especificación del
+> contrato. Ver
+> [`../docs-backend/14-resumen-implementacion-api.md`](../docs-backend/14-resumen-implementacion-api.md).

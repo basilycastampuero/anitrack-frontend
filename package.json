@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:cov": "vitest run --coverage"
+    "test:cov": "vitest run --coverage",
+    "seed:odoo": "node scripts/seed-odoo.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

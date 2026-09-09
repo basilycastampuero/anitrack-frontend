@@ -16,6 +16,13 @@ function axiosErrorWith(status: number, data: unknown): AxiosError {
   return err
 }
 
+describe('createHttpClient', () => {
+  it('manda X-Requested-With: anitrack (ADR-016, defensa CSRF)', () => {
+    const client = createHttpClient()
+    expect(client.defaults.headers['X-Requested-With']).toBe('anitrack')
+  })
+})
+
 describe('normalizeError', () => {
   it('extrae el envelope de error del contrato', () => {
     const result = normalizeError(
@@ -36,6 +43,16 @@ describe('normalizeError', () => {
     )
     expect(result.code).toBe('ALREADY_LINKED')
     expect(result.detail).toEqual(existing)
+  })
+
+  it('conserva el field en VALIDATION (extensión doc 12 §5, 3.2)', () => {
+    const result = normalizeError(
+      axiosErrorWith(422, {
+        error: { code: 'VALIDATION', message: 'dup', field: 'email' },
+      }),
+    )
+    expect(result.code).toBe('VALIDATION')
+    expect(result.field).toBe('email')
   })
 
   it('mapea el status cuando no hay envelope', () => {
