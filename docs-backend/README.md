@@ -11,6 +11,7 @@ porque es documentación de análisis, no decisiones propias del frontend.
 |---|---|
 | [02-analisis-backend-odoo.md](./02-analisis-backend-odoo.md) | Análisis modelo por modelo del backend real (rama `checklist_base`) + diagrama ER + gaps vs el brief original |
 | [08-preguntas-backend.md](./08-preguntas-backend.md) | Lista de preguntas concretas para Chano (transporte de API, CORS/deploy, auth, campos [EXT]) — enviar tal cual |
+| [14-resumen-implementacion-api.md](./14-resumen-implementacion-api.md) | Estado real de implementación del contrato del doc 04 contra `ll-odoo`: qué está construido, en qué rama/commit, qué falta y qué hallazgos no anticipados aparecieron en el modelo de Chano |
 
 Los números de archivo son los de la numeración original de planificación (ver
 [`../docs/README.md`](../docs/README.md)), no correlativos dentro de esta carpeta.
@@ -43,3 +44,10 @@ email se usa por registro propio y por Twitch (pregunta 8.2), y si su app de
 Twitch acepta un `redirect_uri` de este frontend (pregunta 6.1). Mientras
 tanto, el frontend sigue construyendo contra MSW sin depender de nada de esto
 (ADR-001 y ADR-017).
+
+**Nota (2026-09-08):** el detalle endpoint por endpoint de qué está
+implementado y qué falta —antes una tabla al final de
+[`../docs/04-contrato-api.md`](../docs/04-contrato-api.md)— se movió a
+[14-resumen-implementacion-api.md](./14-resumen-implementacion-api.md), para
+no mezclar la especificación del contrato (audiencia frontend) con el estado
+de avance (audiencia Chano).

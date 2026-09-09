@@ -13,7 +13,7 @@
 |---|---|
 | [01-vision-y-alcance.md](./01-vision-y-alcance.md) | Qué es el proyecto realmente, alcance del frontend, restricciones |
 | [03-decisiones-arquitectura.md](./03-decisiones-arquitectura.md) | Decisiones técnicas (mini-ADRs) con justificación: stack, contrato vía MSW, modelo de listas, feature flags, auth por cookie, imágenes, idioma, seed, estructura de carpetas |
-| [04-contrato-api.md](./04-contrato-api.md) | Contrato de API v1: lo que MSW mockea y lo que se le propone a Chano. Es el documento "bisagra" entre frontend y backend |
+| [04-contrato-api.md](./04-contrato-api.md) | Contrato de API v1: forma de cada request/respuesta que MSW mockea, buena parte ya implementada contra el backend real. El estado de esa implementación vive aparte, en [`../docs-backend/14-resumen-implementacion-api.md`](../docs-backend/14-resumen-implementacion-api.md) |
 | [05-modelo-dominio-frontend.md](./05-modelo-dominio-frontend.md) | Tipos TypeScript del dominio + tabla de mapeo Odoo → Frontend |
 | [06-diseno-ui.md](./06-diseno-ui.md) | Rutas, páginas, componentes, design system, flujos UX |
 | [07-plan-de-trabajo.md](./07-plan-de-trabajo.md) | Plan detallado por fases/sprints con tareas y criterios de aceptación |

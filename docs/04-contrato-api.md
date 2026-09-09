@@ -1,6 +1,11 @@
 # 04 — Contrato de API v1
 
-> Este contrato es lo que MSW mockea y lo que se le propone al dev de Odoo.
+> Este contrato es la especificación de la API: qué forma tiene cada request
+> y cada respuesta. Es lo que MSW mockea, y buena parte ya está implementada
+> y verificada contra el backend real de Chano (`ll-odoo`) — el estado de
+> esa implementación (qué está construido, dónde, qué falta) vive aparte, en
+> [`../docs-backend/14-resumen-implementacion-api.md`](../docs-backend/14-resumen-implementacion-api.md),
+> no en este documento.
 > Prefijo: `/api/v1`. Formato: JSON. Auth: cookie de sesión Odoo (ADR-005).
 > Los campos marcados `[EXT]` son extensiones propuestas que HOY no existen en
 > el modelo Odoo (ADR-004) — el backend puede omitirlos y el frontend los
@@ -372,17 +377,8 @@ Igual que `me/.../entries` pero solo si `isPublished`. `403` si no.
 
 ---
 
-## Resumen de implementación para el dev de Odoo
-
-| Endpoint | Modelo(s) Odoo | Dificultad |
-|---|---|---|
-| auth/* | `res.users` + sesión nativa | Baja (wrapper) |
-| genres/platforms/companies | masters | Trivial |
-| franchises (+detail) | franchise/content/version/name | Media (filtros) |
-| search | `db.name` | Baja |
-| me/checklists CRUD | checklist | Baja |
-| me/.../entries | link (+ agregación) | Media (reusar `compute_show_name` como dato estructurado) |
-| me/links POST | lógica de `wizard.link.action_create_link` | Media (ya está escrita, extraerla) |
-| me/links PATCH/DELETE | link (`write`/`action_remove`) | Baja |
-| library-index | link search | Trivial |
-| profiles | checklist published + agregados | Media |
+> El estado real de implementación de este contrato contra el backend de
+> Chano (qué está construido, en qué rama, qué falta y qué se verificó) no
+> vive en este documento — este archivo es solo la especificación del
+> contrato. Ver
+> [`../docs-backend/14-resumen-implementacion-api.md`](../docs-backend/14-resumen-implementacion-api.md).
