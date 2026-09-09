@@ -296,3 +296,74 @@ export const profilesByUser: Record<number, PublicProfile> = {
     publishedChecklists: [],
   },
 }
+
+/**
+ * Snapshot profundo del seed tal como quedó definido arriba, tomado una sola
+ * vez al cargar el módulo (antes de que cualquier handler lo mute). `resetListsSeed`
+ * clona este snapshot en cada llamada, así que ninguna mutación posterior de
+ * `checklistsByUser`/etc. puede "filtrarse" hacia el propio snapshot.
+ *
+ * `structuredClone` (no `JSON.parse(JSON.stringify(...))`) porque el árbol de
+ * checklists es recursivo y, entre `checklistsByUser` y `profilesByUser`, hay
+ * nodos compartidos por referencia (`publishedChecklists` es un `filter` sobre
+ * `checklistsByUser[1]`) — el algoritmo de structured clone preserva esas
+ * referencias compartidas dentro de un mismo llamado, JSON las rompería en
+ * copias independientes sin que importe funcionalmente, pero además JSON
+ * pierde `undefined`/no soporta bien objetos grandes con referencias cíclicas
+ * si el modelo cambiara a futuro.
+ */
+const initialSeedSnapshot = structuredClone({
+  users,
+  mockCredentials,
+  checklistsByUser,
+  entriesByChecklist,
+  libraryIndexByUser,
+  profilesByUser,
+})
+
+/**
+ * Vacía y repuebla un array exportado como `const` en el lugar (no podemos
+ * reasignar el binding). Usado por `resetListsSeed` para restaurar arrays de
+ * nivel superior como `users`.
+ */
+function replaceArrayInPlace<T>(target: T[], source: T[]): void {
+  target.length = 0
+  target.push(...source)
+}
+
+/**
+ * Igual que `replaceArrayInPlace` pero para los `Record` exportados como
+ * `const` (`mockCredentials`, `checklistsByUser`, etc.). `Object.keys` siempre
+ * devuelve `string[]` en runtime aunque el tipo declare claves numéricas (los
+ * objetos JS solo tienen claves string) — de ahí el cast al borrar.
+ */
+function replaceRecordInPlace<K extends string | number, V>(
+  target: Record<K, V>,
+  source: Record<K, V>,
+): void {
+  for (const key of Object.keys(target)) {
+    delete target[key as K]
+  }
+  Object.assign(target, source)
+}
+
+/**
+ * Restaura TODO el estado mutable de este módulo (seed de "mis listas") al
+ * snapshot inicial, con un clon profundo nuevo en cada llamada. Ver deuda #7
+ * (Sprint 3a, bitácora 13): sin esto, un test que crea/renombra/borra algo acá
+ * contamina a los que corran después en el mismo archivo, porque
+ * `server.resetHandlers()` solo resetea handlers de MSW, no datos.
+ *
+ * No toca `currentUserId` (vive en `@/mocks/handlers`, no es parte del seed)
+ * ni `franchises`/`masters` (nunca se mutan: todos los endpoints de catálogo
+ * son de solo lectura). Ver `@/mocks/reset` para el reset combinado.
+ */
+export function resetListsSeed(): void {
+  const fresh = structuredClone(initialSeedSnapshot)
+  replaceArrayInPlace(users, fresh.users)
+  replaceRecordInPlace(mockCredentials, fresh.mockCredentials)
+  replaceRecordInPlace(checklistsByUser, fresh.checklistsByUser)
+  replaceRecordInPlace(entriesByChecklist, fresh.entriesByChecklist)
+  replaceRecordInPlace(libraryIndexByUser, fresh.libraryIndexByUser)
+  replaceRecordInPlace(profilesByUser, fresh.profilesByUser)
+}

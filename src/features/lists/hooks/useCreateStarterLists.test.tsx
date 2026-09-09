@@ -13,6 +13,24 @@ import { useSessionStore } from '@/store/sessionStore'
 import { ApiError } from '@/types/api.types'
 import { t } from '@/i18n/en'
 
+/**
+ * Usuario 2 del seed (`sam@example.com`, mocks/seed/lists.ts) arranca sin
+ * checklists (`checklistsByUser[2] = []`). Antes se registraba un usuario
+ * nuevo con email random (`Date.now()`/`Math.random()`) porque el seed era
+ * estado mutable sin reset entre tests (hallazgo #7, bitácora 13) y este
+ * archivo crea varias veces las cinco listas — reusar el mismo id se
+ * arriesgaba a heredar lo que dejó el test anterior. Con `resetMockDb()`
+ * (`src/mocks/reset.ts`, enganchado global en `src/test/setup.ts`) el seed
+ * vuelve a su estado original en cada test, así que alcanza con loguear al
+ * usuario 2 real vía `POST /auth/login` (que fija `currentUserId` del lado
+ * del mock) en vez de inventar uno.
+ */
+async function loginAsEmptyUser() {
+  const user = await authService.login({ login: 'sam@example.com', password: 'password123' })
+  useSessionStore.setState({ user, status: 'authenticated' })
+  return user
+}
+
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
 afterEach(() => {
   server.resetHandlers()
@@ -29,28 +47,9 @@ function wrapper(client: QueryClient) {
   }
 }
 
-/**
- * Registra un usuario mock nuevo (id `Date.now()`, sin checklists) en vez de
- * reusar `sam@example.com` (usuario 2 del seed): el seed es un objeto mutable
- * a nivel de módulo sin reset entre tests (hallazgo #7, bitácora 13), y este
- * archivo crea varias veces las cinco listas — reusar el mismo id
- * contaminaría un test con lo que dejó el anterior. Registrar da un id nuevo
- * y garantizado vacío en cada test, mismo criterio que los "Temp #N" de
- * `useDeleteChecklist.test.tsx`.
- */
-async function loginAsFreshUser() {
-  const user = await authService.register({
-    name: 'Starter Lists Tester',
-    email: `starter-${Date.now()}-${Math.random()}@example.com`,
-    password: 'password123',
-  })
-  useSessionStore.setState({ user, status: 'authenticated' })
-  return user
-}
-
 describe('useCreateStarterLists', () => {
   it('crea las cinco listas EN SECUENCIA (nunca en paralelo) e invalida tree() una sola vez', async () => {
-    await loginAsFreshUser()
+    await loginAsEmptyUser()
     const client = new QueryClient()
 
     // Envuelve el service real para detectar solapamiento: si dos POST
@@ -114,7 +113,7 @@ describe('useCreateStarterLists', () => {
   }, 8000)
 
   it('si una falla a mitad de camino, no revierte lo ya creado y el árbol conserva esas listas', async () => {
-    await loginAsFreshUser()
+    await loginAsEmptyUser()
     const client = new QueryClient()
 
     const realCreate = listsService.createChecklist.bind(listsService)

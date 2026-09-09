@@ -7,10 +7,8 @@ import { useDeleteChecklist } from '@/features/lists/hooks/useDeleteChecklist'
 import { useChecklists } from '@/features/lists/hooks/useChecklists'
 import { listKeys } from '@/features/lists/hooks/queryKeys'
 import { listsService } from '@/features/lists/services/lists.service'
-import { entriesByChecklist } from '@/mocks/seed/lists'
 import { useSessionStore } from '@/store/sessionStore'
 import type { UserSession } from '@/features/auth/types'
-import type { ListEntry } from '@/features/lists/types'
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
 afterEach(() => server.resetHandlers())
@@ -89,19 +87,19 @@ describe('useDeleteChecklist', () => {
   // dejando stale libraryIndex() (el índice de "ya está en tu lista" que
   // pinta el badge en el catálogo) y los entries() de cualquier sub-carpeta.
   //
-  // Los tres tests de #5 crean sus propias carpetas en vez de reutilizar los
-  // ids fijos del seed (3/4): el seed es un objeto mutable compartido a nivel
-  // de módulo sin reset entre tests (hallazgo #7, fuera de alcance acá), y el
-  // primer test de este archivo ya borra el id 4 — depender de esos ids
-  // haría que el resultado dependiera del orden de ejecución.
+  // Los tres tests de #5 usan directamente los ids fijos del seed (2/3/4,
+  // mocks/seed/lists.ts) en vez de crear sus propias carpetas: con
+  // `resetMockDb()` (deuda #7, bitácora 13) cada test arranca contra el seed
+  // original sin importar qué borró el primer test de este archivo, así que
+  // depender de esos ids ya no ata el resultado al orden de ejecución.
   it('invalida libraryIndex() además de tree() y entries()', async () => {
     const client = new QueryClient()
-    const created = await listsService.createChecklist({ name: 'Temp #5 libraryIndex' })
     client.setQueryData(listKeys.libraryIndex(), { versionIds: [1005], franchiseIds: [] })
 
     const { result } = renderHook(() => useDeleteChecklist(), { wrapper: wrapper(client) })
 
-    result.current.mutate(created.id)
+    // id 2 ("Completed") es una carpeta raíz del seed sin sub-carpetas.
+    result.current.mutate(2)
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
     expect(client.getQueryState(listKeys.libraryIndex())?.isInvalidated).toBe(true)
@@ -109,46 +107,27 @@ describe('useDeleteChecklist', () => {
 
   it('cascada: borrar una carpeta con sub-carpetas también invalida los entries() de esas sub-carpetas', async () => {
     const client = new QueryClient()
-    const parent = await listsService.createChecklist({ name: 'Temp #5 parent' })
-    const child = await listsService.createChecklist({
-      name: 'Temp #5 child',
-      parentId: parent.id,
-    })
-    client.setQueryData(listKeys.entries(child.id), [{ linkId: 99999 }])
+    client.setQueryData(listKeys.entries(4), [{ linkId: 99999 }])
 
     const { result } = renderHook(() => useDeleteChecklist(), { wrapper: wrapper(client) })
 
-    result.current.mutate(parent.id)
+    // "Favorites" (3) tiene a "All-time" (4) como sub-carpeta directa, seed.
+    result.current.mutate(3)
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
-    expect(client.getQueryState(listKeys.entries(child.id))?.isInvalidated).toBe(true)
+    expect(client.getQueryState(listKeys.entries(4))?.isInvalidated).toBe(true)
   })
 
   it('el mock también cascadea al borrar: los entries de una sub-carpeta borrada quedan huérfanos si no se limpian', async () => {
     // Reproduce el hallazgo del revisor sobre `handlers.ts`: `removeChecklistNode`
     // borra el nodo del árbol, pero `delete entriesByChecklist[id]` solo limpia
-    // el nivel borrado, no sus descendientes. Sin este fix, entries(child.id)
-    // sigue devolviendo el link huérfano después de borrar la carpeta padre.
-    const parent = await listsService.createChecklist({ name: 'Temp #5b parent' })
-    const child = await listsService.createChecklist({
-      name: 'Temp #5b child',
-      parentId: parent.id,
-    })
-    const orphanEntry: ListEntry = {
-      linkId: 88888,
-      kind: 'version',
-      displayName: 'Orphan entry',
-      imageUrl: null,
-      order: 0,
-      contentType: 'V',
-      franchiseId: 1,
-      notes: null,
-    }
-    entriesByChecklist[child.id] = [orphanEntry]
+    // el nivel borrado, no sus descendientes. Sin este fix, entries(4) seguiría
+    // devolviendo el link huérfano después de borrar "Favorites" (3).
+    // "All-time" (4) ya tiene su propio entry en el seed (mocks/seed/lists.ts),
+    // así que no hace falta fabricar uno a mano.
+    await listsService.deleteChecklist(3)
 
-    await listsService.deleteChecklist(parent.id)
-
-    const entries = await listsService.getEntries(child.id)
+    const entries = await listsService.getEntries(4)
     expect(entries).toEqual([])
   })
 })

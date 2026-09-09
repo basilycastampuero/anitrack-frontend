@@ -1,10 +1,19 @@
 import '@testing-library/jest-dom/vitest'
 import { afterEach } from 'vitest'
 import { cleanup } from '@testing-library/react'
+import { resetMockDb } from '@/mocks/reset'
 
 // Limpia el DOM montado por RTL después de cada test.
+//
+// También resetea acá (no en cada archivo, junto a `server.resetHandlers()`)
+// el estado mutable de MSW (deuda #7, bitácora 13): `setupFiles` corre para
+// TODA la suite sin que un archivo nuevo tenga que acordarse de importarlo,
+// que es justo el problema que causó la deuda (varios archivos lo esquivaron
+// a mano en vez de arreglarlo). Es barato — son objetos en memoria, no I/O —
+// así que no importa pagarlo también en archivos que no tocan MSW.
 afterEach(() => {
   cleanup()
+  resetMockDb()
 })
 
 // jsdom no implementa estas APIs del Pointer Events / scroll que Radix usa

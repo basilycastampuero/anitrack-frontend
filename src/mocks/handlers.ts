@@ -19,7 +19,18 @@ const BASE = '/api/v1'
 const url = (path: string) => `${BASE}${path}`
 
 /** Sesión mock en memoria. Default: usuario 1 logueado (mejor demo). */
-let currentUserId: number | null = 1
+const DEFAULT_MOCK_USER_ID = 1
+let currentUserId: number | null = DEFAULT_MOCK_USER_ID
+
+/**
+ * Restaura la sesión mock al usuario logueado por default. `currentUserId` es
+ * estado mutable a nivel de módulo (deuda #7, bitácora 13): sin esto, un test
+ * que hace login/logout/register queda "logueado" para el resto de los tests
+ * del mismo archivo. Se usa junto a `resetListsSeed` desde `@/mocks/reset`.
+ */
+export function resetMockSession(): void {
+  currentUserId = DEFAULT_MOCK_USER_ID
+}
 
 const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
   UNAUTHORIZED: 401,

@@ -50,17 +50,19 @@ async function openMenuFor(name: string) {
 }
 
 // `checklistsByUser`/`entriesByChecklist` son estado mutable a nivel de
-// módulo que MSW no resetea entre tests (hallazgo #7, doc 13): cada test que
-// muta el seed (renombrar, borrar, publicar) crea sus propios nodos con
-// nombres únicos en vez de reusar "Watching"/"Favorites" del seed — así el
-// resultado no depende del orden de ejecución dentro del archivo (mismo
-// criterio que `useDeleteChecklist.test.tsx`).
+// módulo, pero `resetMockDb()` (deuda #7, bitácora 13) lo restaura al seed
+// original después de cada test (afterEach global, src/test/setup.ts): los
+// tests de este archivo pueden usar directamente los nodos fijos del seed
+// (mocks/seed/lists.ts) — "Watching" (1), "Completed" (2), "Favorites" (3,
+// sin publicar) — sin arrastrar lo que dejó el test anterior. Solo los casos
+// de cascada de borrado (que necesitan un padre con exactamente una
+// sub-carpeta y sin entries) siguen creando sus propios nodos, porque ningún
+// nodo del seed calza con esa forma exacta.
 
 describe('ChecklistNodeMenu — rename', () => {
   it('renombra de forma optimista y cierra el dialog al confirmar el servidor', async () => {
-    await listsService.createChecklist({ name: 'Rename target (happy)' })
     renderTree()
-    const user = await openMenuFor('Rename target (happy)')
+    const user = await openMenuFor('Watching')
     await user.click(screen.getByRole('menuitem', { name: 'Rename' }))
 
     const input = await screen.findByLabelText('Name')
@@ -75,7 +77,6 @@ describe('ChecklistNodeMenu — rename', () => {
   })
 
   it('ante un error inyectado revierte el nombre y deja el dialog abierto con el error visible', async () => {
-    await listsService.createChecklist({ name: 'Rename target (rollback)' })
     server.use(
       http.patch('/api/v1/me/checklists/:id', async () => {
         // Delay para observar el estado optimista antes del rollback (mismo
@@ -88,7 +89,7 @@ describe('ChecklistNodeMenu — rename', () => {
       }),
     )
     renderTree()
-    const user = await openMenuFor('Rename target (rollback)')
+    const user = await openMenuFor('Completed')
     await user.click(screen.getByRole('menuitem', { name: 'Rename' }))
 
     const input = await screen.findByLabelText('Name')
@@ -108,7 +109,7 @@ describe('ChecklistNodeMenu — rename', () => {
     // Rollback: el árbol vuelve al nombre original ...
     await waitFor(() =>
       expect(
-        screen.getByRole('treeitem', { name: 'Rename target (rollback)', hidden: true }),
+        screen.getByRole('treeitem', { name: 'Completed', hidden: true }),
       ).toBeInTheDocument(),
     )
     // ... y el error queda visible en el dialog, que sigue abierto para reintentar.
@@ -133,9 +134,9 @@ describe('ChecklistNodeMenu — create', () => {
   })
 
   it('crea una sub-lista bajo el nodo del menú', async () => {
-    await listsService.createChecklist({ name: 'Create sub target' })
     renderTree()
-    const user = await openMenuFor('Create sub target')
+    // "Watching" (1, seed) no tiene sub-carpetas todavía.
+    const user = await openMenuFor('Watching')
     await user.click(screen.getByRole('menuitem', { name: 'New sub-list' }))
 
     const input = await screen.findByLabelText('Name')
@@ -144,7 +145,7 @@ describe('ChecklistNodeMenu — create', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
 
     // El nodo pasa a tener hijos: hay que expandirlo para ver la sub-lista.
-    const parent = await screen.findByRole('treeitem', { name: 'Create sub target' })
+    const parent = await screen.findByRole('treeitem', { name: 'Watching' })
     await waitFor(() => expect(parent).toHaveAttribute('aria-expanded', 'false'))
     parent.focus()
     await user.keyboard('{ArrowRight}')
@@ -188,7 +189,6 @@ describe('ChecklistNodeMenu — delete', () => {
   })
 
   it('ante un error inyectado, mantiene el dialog abierto con el error visible', async () => {
-    await listsService.createChecklist({ name: 'Delete rollback target' })
     server.use(
       http.delete('/api/v1/me/checklists/:id', async () => {
         await delay(20)
@@ -199,7 +199,7 @@ describe('ChecklistNodeMenu — delete', () => {
       }),
     )
     renderTree()
-    const user = await openMenuFor('Delete rollback target')
+    const user = await openMenuFor('Completed')
     await user.click(screen.getByRole('menuitem', { name: 'Delete' }))
     await screen.findByRole('dialog')
 
@@ -210,28 +210,25 @@ describe('ChecklistNodeMenu — delete', () => {
     // El dialog modal marca el resto de la página `aria-hidden` mientras está
     // abierto (Radix): hace falta `hidden: true` para seguir viendo el
     // treeitem detrás de él y confirmar que el nodo no se borró.
-    expect(
-      screen.getByRole('treeitem', { name: 'Delete rollback target', hidden: true }),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('treeitem', { name: 'Completed', hidden: true })).toBeInTheDocument()
   })
 })
 
 describe('ChecklistNodeMenu — publish toggle', () => {
   it('publica/despublica sin dialog, de forma optimista', async () => {
-    await listsService.createChecklist({ name: 'Publish target', isPublished: false })
     renderTree()
-    const user = await openMenuFor('Publish target')
+    // "Favorites" (3, seed) arranca sin publicar.
+    const user = await openMenuFor('Favorites')
     await user.click(screen.getByRole('menuitem', { name: 'Publish' }))
 
     // Sin dialog de por medio: el menú se cierra y el toggle queda optimista.
     await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
-    await openMenuFor('Publish target')
+    await openMenuFor('Favorites')
     expect(screen.getByRole('menuitem', { name: 'Unpublish' })).toBeInTheDocument()
     void user
   })
 
   it('ante un error inyectado, revierte el toggle y avisa por toast', async () => {
-    await listsService.createChecklist({ name: 'Publish rollback target', isPublished: true })
     server.use(
       http.patch('/api/v1/me/checklists/:id', async () => {
         await delay(20)
@@ -239,23 +236,24 @@ describe('ChecklistNodeMenu — publish toggle', () => {
       }),
     )
     renderTree()
-    const user = await openMenuFor('Publish rollback target')
+    // "Watching" (1, seed) arranca publicada.
+    const user = await openMenuFor('Watching')
     await user.click(screen.getByRole('menuitem', { name: 'Unpublish' }))
 
     await waitFor(() => expect(toast.error).toHaveBeenCalled())
     // Rollback: reabrir el menú debe seguir ofreciendo "Unpublish" (sigue publicada).
-    await openMenuFor('Publish rollback target')
+    await openMenuFor('Watching')
     expect(screen.getByRole('menuitem', { name: 'Unpublish' })).toBeInTheDocument()
     void user
   })
 })
 
 describe('ChecklistNodeMenu — teclado y accesibilidad', () => {
-  // "Watching" (seed, id 1) es siempre el primer nodo raíz visible — ningún
-  // otro test de este archivo lo toca (todos crean sus propios nodos, ver
-  // nota arriba), así que arranca con el roving tabindex por defecto
-  // (`focusedId` inicial = primer nodo visible) sin depender del orden de
-  // ejecución del resto del archivo.
+  // "Watching" (seed, id 1) es siempre el primer nodo raíz visible: gracias a
+  // `resetMockDb()` (deuda #7, bitácora 13) cada test de este archivo arranca
+  // contra el seed original, así que da igual qué le hicieron los tests de
+  // los describe de arriba — acá siempre empieza con el roving tabindex por
+  // defecto (`focusedId` inicial = primer nodo visible).
   it('Shift+F10 sobre el nodo con foco abre su menú contextual', async () => {
     renderTree()
     const watching = await screen.findByRole('treeitem', { name: 'Watching' })
@@ -295,11 +293,10 @@ describe('ChecklistNodeMenu — teclado y accesibilidad', () => {
   })
 
   it('un click en el trigger del menú no selecciona el nodo', async () => {
-    await listsService.createChecklist({ name: 'Keyboard target C' })
     const onSelect = vi.fn()
     renderTree(onSelect)
-    const item = await screen.findByRole('treeitem', { name: 'Keyboard target C' })
-    const trigger = within(item).getByRole('button', { name: 'Actions for Keyboard target C' })
+    const item = await screen.findByRole('treeitem', { name: 'Watching' })
+    const trigger = within(item).getByRole('button', { name: 'Actions for Watching' })
 
     await userEvent.setup().click(trigger)
 
