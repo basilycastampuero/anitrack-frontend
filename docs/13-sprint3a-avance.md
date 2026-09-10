@@ -139,9 +139,12 @@ patrón — **estados de error que se pierden en el camino**:
   el `PATCH` real acepta esos campos en el body pero no mueve ni reordena
   nada. Falso verde latente cuando 3.5b agregue mover/reordenar carpetas.
 - **#7** — el estado del seed de MSW no se resetea entre tests: flake latente
-  por orden de ejecución.
+  por orden de ejecución. **[CERRADO 2026-09-09, commit `a9de61f`]** — ver la
+  actualización de cierre al final de esta bitácora.
 - **#8** — `VITE_API_MODE` tiene default `'mock'`: un build de producción sin
   esa variable de entorno serviría un login falso en vez de fallar.
+  **[CERRADO 2026-09-09, commit `bc91344`]** — ver la actualización de cierre
+  al final de esta bitácora.
 - **#9 a #14** — hallazgos bajos de la misma revisión, sin detalle adicional
   registrado en esta sesión.
 
@@ -203,7 +206,8 @@ dark mode y mobile 360px.
   depende de que `patchChecklistNode` y el mock soporten `parentId`/`order`).
 - Decidir dónde entra el punto de logout en la UI (hueco de plan detectado
   arriba) y si el flag `VITE_API_MODE` necesita un default más seguro para
-  build de producción (#8).
+  build de producción (#8 — **cerrado 2026-09-09**, ver el final de la
+  bitácora).
 - Seguir la conversación con Chano en
   [`../docs-backend/08-preguntas-backend.md`](../docs-backend/08-preguntas-backend.md):
   el `invitation_scope` de producción (pregunta 8.2, todavía abierta) y si
@@ -355,8 +359,9 @@ MSW (`178f64a`, tarea B2.7); el estado ya reportado sigue siendo el vigente
 - El hueco de ADR-014 sobre el admin sin restricción en `/me/*` (arriba) no
   bloquea nada hoy, pero conviene revisarlo si alguna vez el admin necesita
   consumir esta API.
-- Sigue pendiente decidir el punto de entrada de logout en la UI y el
-  default de `VITE_API_MODE` (deuda #8), y seguir la conversación con Chano
+- Sigue pendiente decidir el punto de entrada de logout en la UI. El default
+  de `VITE_API_MODE` (deuda #8) **se cerró el 2026-09-09** (commit
+  `bc91344`, ver el final de la bitácora). Seguir la conversación con Chano
   sobre `invitation_scope` y si acepta el trabajo de `ll-odoo` como PR (sin
   cambios desde la sección anterior).
 
@@ -495,7 +500,10 @@ Continúa la numeración de la sección "Revisión pre-merge" de arriba (#1–#1
 Nada de lo de abajo es nuevo hallazgo de revisión formal; son huecos
 detectados durante B4/B5 y quedan igual de trazables por número/nombre:
 
-- **#6, #7, #8** — sin cambios (ver arriba).
+- **#6** — sin cambios (ver arriba).
+- **#7 y #8** — **cerradas el 2026-09-09** (commits `a9de61f` y `bc91344`
+  respectivamente), ver la actualización de cierre al final de esta
+  bitácora. Al momento de escribir esta sección todavía seguían abiertas.
 - **#9 a #14** — hallazgos bajos de la revisión pre-merge de 3.5a/3.5b, sin
   detalle adicional registrado en esta sesión.
 - **No hay punto de entrada de logout en la UI** — el hook está completo y
@@ -509,7 +517,9 @@ detectados durante B4/B5 y quedan igual de trazables por número/nombre:
   sección de verificación original del sprint).
 - **Nada pasó por CI**: la rama `sprint-2-catalogo` va muy por delante de
   `origin/main` con todo el Sprint 3a adentro pese al nombre, y la CI solo
-  corre en `main`/`develop`.
+  corre en `main`/`develop`. **Dejó de ser así el 2026-09-09** — ver la
+  actualización de cierre al final de esta bitácora (rama renombrada, PR #1
+  abierto y CI verde).
 - **`libraryIndexSchema`/`checklistResponseSchema` sin exportar** (nueva,
   detectada en B5 — ver arriba).
 
@@ -538,8 +548,9 @@ con `curl` (email duplicado, registro válido, campos faltantes).
   el Sprint 3a; lo que sigue (3.7 en adelante, tracking) es Sprint 3b.
 - Exportar `libraryIndexSchema` y `checklistResponseSchema` antes del
   próximo checkpoint de contrato (deuda nueva de esta sesión).
-- Decidir el punto de entrada de logout en la UI y el default de
-  `VITE_API_MODE` (deuda #8) — sin cambios.
+- Decidir el punto de entrada de logout en la UI — sin cambios. El default
+  de `VITE_API_MODE` (deuda #8) **se cerró el 2026-09-09** (commit
+  `bc91344`, ver el final de la bitácora).
 - Seguir la conversación con Chano sobre `invitation_scope` de producción y
   si acepta el trabajo de `ll-odoo` como PR — sin cambios.
 
@@ -616,7 +627,11 @@ Hold, Dropped, Plan to Watch.
   el usuario vacío del seed (`sam@example.com`). No afecta al producto, sí a
   cómo se escriben los scripts de verificación en navegador real: hay que
   navegar con clicks, no recargar la página, para no perder la sesión del
-  usuario que se está probando.
+  usuario que se está probando. **Nota (2026-09-09)**: el cierre de la deuda
+  #7 (`resetMockDb()`, commit `a9de61f`) resetea este mismo `currentUserId`
+  entre tests automatizados (`resetMockSession()`), pero no cambia nada del
+  comportamiento descrito acá — un `page.reload()` en navegador real sigue
+  perdiendo la sesión, porque eso pasa fuera del ciclo de vida de los tests.
 
 Verificado: `npm run typecheck` y `npm run lint` limpios, `npx vitest run` —
 **166 tests en 35 archivos**, todos en verde. Flujo completo verificado en
@@ -626,7 +641,12 @@ navegador real (Chromium de Playwright) con el usuario vacío del seed.
 
 Todo lo detectado durante el Sprint 3a completo (carriles A y B), junta y
 visible en un solo lugar. Sigue la numeración de la sección "Revisión
-pre-merge" de arriba (#1–#14):
+pre-merge" de arriba (#1–#14).
+
+> **Actualización (2026-09-09).** De esta lista, **#7 y #8 se cerraron**
+> (commits `a9de61f` y `bc91344`) y **el sprint pasó por CI por primera vez**
+> (PR #1, verde) — ver la actualización de cierre al final de esta bitácora.
+> El resto de la lista sigue abierto tal como se describe abajo.
 
 - **#6** — `patchChecklistNode` (`src/features/lists/utils/checklistTree.ts`)
   acepta `parentId`/`order` en el body sin mover ni reordenar nada, y el mock
@@ -637,9 +657,11 @@ pre-merge" de arriba (#1–#14):
   del sprint (3.5b, 3.6 y 3.5c), que tuvieron que esquivarlo a mano creando
   sus propios usuarios/datos en vez de depender del seed fijo. Emparentado
   con el hallazgo de entorno de 3.5c arriba (mismo patrón de estado mutable a
-  nivel de módulo, ahora también en la sesión).
+  nivel de módulo, ahora también en la sesión). **[CERRADO 2026-09-09,
+  commit `a9de61f`]**.
 - **#8** — `VITE_API_MODE` tiene default `'mock'`: un build de producción sin
   esa variable de entorno serviría un login falso en vez de fallar.
+  **[CERRADO 2026-09-09, commit `bc91344`]**.
 - **#9 a #14** — hallazgos bajos de la revisión pre-merge de 3.5a/3.5b, sin
   detalle adicional registrado en ninguna sesión.
 - **Sin punto de entrada de logout en la UI**: el hook `useLogout` existe y
@@ -660,7 +682,9 @@ pre-merge" de arriba (#1–#14):
   By decade > 2010s).
 - **Nada del sprint pasó por CI**: la rama `sprint-2-catalogo` contiene el
   Sprint 3a entero pese al nombre, va muy por delante de `origin/main`, y la
-  CI del proyecto solo corre en `main`/`develop`.
+  CI del proyecto solo corre en `main`/`develop`. **[CERRADO 2026-09-09]** —
+  la rama se renombró a `sprint-3a-auth-listas`, se abrió el PR #1 contra
+  `main` y la CI corrió verde por primera vez en la historia del proyecto.
 
 ### Cierre de Sprint 3a
 
@@ -680,3 +704,135 @@ La deuda abierta queda consolidada en la sección de arriba; ninguna bloquea
 el cierre del sprint. **Camino crítico a partir de ahora: Sprint 3b**
 (tracking y vinculación, doc 07) — ver [README.md](./README.md) para el
 estado general del proyecto.
+
+## Actualización (2026-09-09) — Cierre de las deudas #7 y #8, y primer PR con CI verde
+
+> Continúa esta misma bitácora, con Sprint 3a ya cerrado (sección anterior).
+> Tres commits de trabajo real después del cierre: dos cierran deuda
+> numerada (#7, #8) y uno sube la CI a Node 22. Además, el proyecto tuvo su
+> primer PR y su primera corrida de CI verde. No hay ADR nuevo: ninguna
+> decisión de esta sesión cruza la vara de "nuevo trade-off arquitectónico"
+> (el default de `VITE_API_MODE` es una corrección de seguridad, no una
+> decisión de arquitectura nueva).
+
+### Deuda #7 — reset del seed de MSW entre tests (commit `a9de61f`)
+
+`server.resetHandlers()` (MSW) resetea los handlers agregados con
+`server.use(...)`, no los datos que esos handlers leen o escriben: el seed
+de "mis listas" es estado mutable a nivel de módulo, así que cualquier test
+que creaba, renombraba o borraba algo contaminaba a los que corrían después
+en el mismo archivo. Tres tareas seguidas del sprint (3.5b, 3.6, 3.5c)
+tuvieron que esquivarlo a mano inventando nombres únicos o usuarios de
+descarte en vez de depender del seed fijo.
+
+- **`resetMockDb()`** (`src/mocks/reset.ts`, nuevo) combina
+  `resetListsSeed()` (restaura `users`, `mockCredentials`,
+  `checklistsByUser`, `entriesByChecklist`, `libraryIndexByUser`,
+  `profilesByUser` desde un snapshot congelado) y `resetMockSession()`
+  (vuelve `currentUserId` a 1).
+- **Se engancha en el `afterEach` global de `src/test/setup.ts`**, no junto a
+  cada `resetHandlers()` por archivo: el patrón por archivo es justo el que
+  venía fallando, porque nada obliga a que un archivo nuevo se acuerde de
+  agregarlo.
+- **Clonado con `structuredClone`, no `JSON.parse(JSON.stringify())`**:
+  `profilesByUser[1].publishedChecklists` es un `filter()` sobre
+  `checklistsByUser[1]`, es decir que comparten objetos, y un clon vía JSON
+  los convertiría en copias independientes — el mock empezaría a comportarse
+  distinto del backend real.
+- **Los seeds de catálogo (`franchises.ts`, `masters.ts`, `derive.ts`) no se
+  resetean a propósito**: ningún handler los muta, y queda documentado en el
+  código para que no parezca un olvido.
+- **Medido, no supuesto**: con el reset desactivado fallan 12 tests en 4
+  archivos. La suite queda en **172 tests en 36 archivos**, verde también
+  con `--sequence.shuffle`.
+
+### Deuda #8 — default de `VITE_API_MODE` en producción (commit `bc91344`)
+
+Sin la variable seteada, `env.apiMode` caía siempre en `'mock'`: un build de
+producción al que se le olvidara configurarla arrancaba MSW y servía una API
+falsa donde cualquiera entra con las credenciales del seed, sin error ni
+ninguna señal que lo delatara.
+
+- El default pasa a depender del entorno: `'mock'` en desarrollo (donde
+  corre el 100% del trabajo diario, sin exigir levantar Odoo) y `'real'` en
+  un build de producción (`import.meta.env.PROD`). Un default no es neutral:
+  es lo que responde el sistema cuando alguien se olvidó de elegir, así que
+  tiene que apuntar al lado donde el olvido no hace daño.
+  (`src/lib/env.ts`.)
+- **No se bloquea el modo mock en producción**: un build con
+  `VITE_API_MODE=mock` explícito sigue sirviendo para desplegar una demo sin
+  backend, un caso de uso real de este proyecto. La diferencia es que ahora
+  es una decisión deliberada, no un descuido.
+- `.env.example` deja de afirmar que mock es el default a secas.
+- El mismo commit agregó `.nvmrc` (versión `20`, para igualar a la CI de
+  entonces) — superado un commit después, ver abajo.
+
+### CI: Node 22 y actions v7 (commit `f5abf28`)
+
+Node 20 llegó a fin de vida en abril de 2026 y ya no recibe parches de
+seguridad; el `.nvmrc` agregado el día anterior lo había fijado solo para
+igualar lo que ya tenía el workflow, sin cuestionar el número.
+
+- **`.nvmrc` y `ci.yml` suben a Node 22** (LTS vigente), no a 24 (la versión
+  de la máquina de desarrollo) a propósito: dejar la CI un escalón por
+  debajo del Node local hace que una API demasiado nueva la detecte la CI y
+  no el día del deploy.
+- **Las acciones pasan de `@v4` a `@v7`.** Resuelve el warning de la primera
+  corrida, que no hablaba del Node del proyecto sino del runtime interno de
+  las propias acciones (declaraban Node 20 y el runner las forzaba a Node
+  24). Único cambio breaking relevante revisado en las notas de versión:
+  `setup-node` v6 limitó el cacheo automático a npm — y `cache: npm` ya
+  estaba declarado.
+
+### Primer PR y primera corrida de CI verde
+
+- La rama de trabajo se renombró de `sprint-2-catalogo` a
+  `sprint-3a-auth-listas` (el nombre viejo ya no describía el contenido,
+  ver la deuda "Nada del sprint pasó por CI" de la sección anterior): se
+  empujó al remoto y se borró `sprint-2-catalogo` de `origin` (no tenía
+  ningún commit propio — su punta era ancestro de la nueva rama).
+- Se abrió el **PR #1** contra `main`:
+  <https://github.com/basilycastampuero/anitrack-frontend/pull/1> (35
+  commits, mergeado el mismo día).
+- **La CI corrió por primera vez en la historia del proyecto y salió
+  verde**: `npm ci` desde cero en una máquina limpia, más lint, typecheck y
+  tests. Hasta acá, todo lo verde era verificación local únicamente — esta
+  es la primera verificación independiente del proyecto.
+
+### Corrección: Playwright sí tiene Chromium en esta máquina
+
+Esta misma bitácora ya lo señalaba bien desde su sección "Verificación"
+original (arriba, 2026-09-03), pero `CLAUDE.md` (raíz del workspace, fuera
+de este repo) seguía afirmando que Playwright no tenía Chromium instalado
+en esta máquina — corregido en esta misma sesión, junto con `docs/12`
+(diseño del sprint, también corregido acá). `docs/09`, `docs/10` y `docs/11`
+son bitácoras cerradas de sprints anteriores y arrastran la misma
+afirmación vieja, pero no se editan retroactivamente. Para que quede dicho
+una sola vez, completo, en el doc vigente: el Chromium propio de
+Playwright estaba descargado; faltaba una sola librería del sistema
+(`libasound2t64`), instalada por el dueño del proyecto. La herramienta MCP
+de Playwright sigue sin funcionar porque está fijada al canal `chrome` de
+Google, no instalado — lo que funciona es lanzar el binario propio de
+Playwright directamente
+(`~/.cache/ms-playwright/chromium-*/chrome-linux64/chrome --no-sandbox`).
+Toda la verificación visual del Sprint 3a (3.5a en adelante) se hizo así.
+
+### Verificación de esta actualización
+
+```bash
+npm run typecheck   # limpio
+npm run lint        # 0 errores
+npx vitest run       # 172 tests, 36 archivos, verde (también con --sequence.shuffle)
+```
+
+CI (GitHub Actions, PR #1): verde — `npm ci`, lint, typecheck, tests, build,
+sobre Node 22.
+
+### Qué falta (siguiente paso), actualizado
+
+- Deuda restante del sprint: **#6, #9 a #14**, el punto de entrada de logout
+  en la UI, el alcance de la `ir.rule` de ADR-014 a `base.group_portal`, los
+  schemas `libraryIndexSchema`/`checklistResponseSchema` sin exportar, y la
+  falta de verificación con lectores de pantalla reales. Nada de esto se
+  tocó en esta sesión.
+- Camino crítico sigue siendo **Sprint 3b** (tracking y vinculación, doc 07).

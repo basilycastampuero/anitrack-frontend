@@ -378,6 +378,14 @@ escribe, se corre, se borra, y la conclusión queda en la bitácora).
 | `invitation_scope` en `b2b` en producción rompe el registro | `/auth/register` devuelve `403` con mensaje explícito; el formulario se oculta por flag (ADR-015) |
 | Sigue sin verificación visual en navegador real (Playwright sin Chromium, arrastrado desde el doc 09) | El sprint suma el árbol accesible, que es justo lo que peor se testea sin navegador. Instalar Chromium (`npx playwright install chrome`) deja de ser opcional y es prerrequisito del CA de 3.5a |
 
+> **Actualización (2026-09-03, ver [13-sprint3a-avance.md](./13-sprint3a-avance.md)).**
+> El riesgo de la última fila se cerró desde el arranque del sprint: el
+> Chromium propio de Playwright estaba descargado, solo faltaba la librería
+> de sistema `libasound2t64` (instalada). Lo que sigue sin funcionar es la
+> herramienta MCP de Playwright (fijada al canal `chrome` de Google, no
+> instalado) — la verificación visual del sprint se hizo lanzando el binario
+> propio de Playwright directamente.
+
 ## 7. Qué le toca a cada agente
 
 - **`anitrack-senior-software-engineer`** — ejecuta el carril A en el orden de
