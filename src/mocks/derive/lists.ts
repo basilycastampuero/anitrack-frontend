@@ -57,6 +57,24 @@ export function removeChecklist(
   return nodes.some((n) => removeChecklist(n.children, id))
 }
 
+/**
+ * El array de hermanos donde vive `id`: los `children` de su padre, o las
+ * raíces del usuario si está en el primer nivel. Devuelve el array real (no
+ * una copia) porque quien lo pide lo va a mutar — mover y reordenar son
+ * operaciones del mock sobre el seed, no transformaciones puras.
+ */
+export function findSiblings(
+  nodes: SeedChecklistNode[],
+  id: number,
+): SeedChecklistNode[] | null {
+  if (nodes.some((node) => node.id === id)) return nodes
+  for (const node of nodes) {
+    const found = findSiblings(node.children, id)
+    if (found) return found
+  }
+  return null
+}
+
 /** El propio id de `node` más el de todos sus descendientes. */
 export function collectSubtreeIds(node: {
   id: number

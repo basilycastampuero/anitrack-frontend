@@ -86,6 +86,29 @@ export interface UpdateLinkRequest {
   finishedAt?: string | null // [EXT]
 }
 
+/**
+ * El subconjunto de `UpdateChecklistRequest` que el camino **optimista** puede
+ * aplicar sin mentir (deuda #6, doc 15 §4.1).
+ *
+ * Renombrar, describir, publicar y cambiar el orden de armado son ediciones
+ * de un nodo que ya está en cache: el cliente sabe exactamente cómo va a
+ * quedar el árbol y puede escribirlo al instante. `parentId` y `order`, en
+ * cambio, son **estructurales**: mueven el nodo entre padres y reordenan
+ * hermanos, y `patchChecklistNode` no hace nada de eso — los aceptaba y los
+ * ignoraba en silencio, que es un falso verde armado esperando a 4.10.
+ *
+ * Acotarlo por tipo convierte esa convención en un error de compilación: quien
+ * construya mover/reordenar no puede pasar por acá, tiene que escribir el hook
+ * estructural (sin optimistic, misma regla que crear/borrar en el 3a) o
+ * ampliar el helper a conciencia. El transporte no cambia: el service sigue
+ * aceptando el `UpdateChecklistRequest` completo, y el backend real ya soporta
+ * ambos campos con detección de ciclos.
+ */
+export type CosmeticChecklistPatch = Pick<
+  UpdateChecklistRequest,
+  'name' | 'description' | 'isPublished' | 'sortingMode'
+>
+
 /** Derivado en el cliente para la UI de progreso (doc 05). */
 export interface Progress {
   watched: number

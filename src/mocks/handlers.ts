@@ -5,6 +5,7 @@ import type {
   ChecklistNode,
   CreateLinkRequest,
   ListEntry,
+  UpdateChecklistRequest,
   UpdateLinkRequest,
 } from '@/features/lists/types'
 import { genres, platforms, companies } from '@/mocks/seed/masters'
@@ -22,6 +23,7 @@ import {
 import {
   aggregateProgress,
   collectSubtreeIds,
+  findSiblings,
   computeStats,
   deriveLibraryIndex,
   findAltName,
@@ -363,15 +365,68 @@ export const handlers = [
     )
   }),
 
+  /**
+   * Honra también `parentId` y `order` (deuda #6, doc 15 §4.1). Antes hacía un
+   * `Object.assign` del body entero, así que los aceptaba, los pegaba como
+   * campos sueltos sobre el nodo y no movía nada: un falso verde esperando a
+   * que 4.10 lo llamara. El backend real ya los implementa (B4, con detección
+   * de ciclos), así que rechazarlos acá habría inventado una divergencia.
+   */
   http.patch(url('/me/checklists/:id'), async ({ request, params }) => {
     await latency(200)
     const err = injectedError(request)
     if (err) return err
     const uid = requireUser()
     if (!uid) return errorResponse('UNAUTHORIZED', 'Login required')
-    const list = findChecklist(userTree(uid), Number(params.id))
+    const roots = userTree(uid)
+    const list = findChecklist(roots, Number(params.id))
     if (!list) return errorResponse('NOT_FOUND', 'Checklist not found')
-    Object.assign(list, await request.json())
+    const body = (await request.json()) as UpdateChecklistRequest
+
+    if (body.name != null) list.name = body.name
+    if ('description' in body) list.description = body.description ?? null
+    if (body.sortingMode != null) list.sortingMode = body.sortingMode
+    if (body.isPublished != null) list.isPublished = body.isPublished
+
+    if (body.parentId != null) {
+      // Mover una carpeta dentro de sí misma dejaría el árbol con un ciclo y
+      // el recorrido en un loop infinito. El backend lo detecta; acá también.
+      if (collectSubtreeIds(list).includes(body.parentId)) {
+        return errorResponse(
+          'VALIDATION',
+          'A list cannot be moved into itself',
+          {
+            field: 'parentId',
+          },
+        )
+      }
+      const target = findChecklist(roots, body.parentId)
+      if (!target) {
+        return errorResponse('NOT_FOUND', 'Parent checklist not found')
+      }
+      removeChecklist(roots, list.id)
+      list.order = target.children.length
+      target.children.push(list)
+    }
+
+    if (body.order != null) {
+      const siblings = findSiblings(roots, list.id)
+      if (siblings) {
+        const from = siblings.findIndex((sibling) => sibling.id === list.id)
+        siblings.splice(from, 1)
+        siblings.splice(
+          Math.max(0, Math.min(body.order, siblings.length)),
+          0,
+          list,
+        )
+        // Los hermanos se renumeran enteros: dejar huecos u `order` repetidos
+        // haría que el árbol dependa del orden de inserción del array.
+        siblings.forEach((sibling, index) => {
+          sibling.order = index
+        })
+      }
+    }
+
     return HttpResponse.json({
       checklist: {
         ...list,

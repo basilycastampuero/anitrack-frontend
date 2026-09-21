@@ -2,11 +2,19 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { listsService } from '@/features/lists/services/lists.service'
 import { listKeys } from '@/features/lists/hooks/queryKeys'
 import { patchChecklistNode } from '@/features/lists/utils/checklistTree'
-import type { ChecklistNode, UpdateChecklistRequest } from '@/features/lists/types'
+import type {
+  ChecklistNode,
+  CosmeticChecklistPatch,
+} from '@/features/lists/types'
 
 interface UpdateChecklistVariables {
   id: number
-  patch: UpdateChecklistRequest
+  /**
+   * Solo campos cosméticos (deuda #6, doc 15 §4.1): mover o reordenar una
+   * carpeta es estructural y no puede ir por el camino optimista, porque
+   * `patchChecklistNode` no sabe hacerlo. Mover/reordenar es la tarea 4.10.
+   */
+  patch: CosmeticChecklistPatch
 }
 
 interface UpdateChecklistContext {
@@ -39,9 +47,14 @@ export function useUpdateChecklist() {
     onMutate: async ({ id, patch }) => {
       await queryClient.cancelQueries({ queryKey: listKeys.tree() })
 
-      const previousTree = queryClient.getQueryData<ChecklistNode[]>(listKeys.tree())
+      const previousTree = queryClient.getQueryData<ChecklistNode[]>(
+        listKeys.tree(),
+      )
       if (previousTree) {
-        queryClient.setQueryData(listKeys.tree(), patchChecklistNode(previousTree, id, patch))
+        queryClient.setQueryData(
+          listKeys.tree(),
+          patchChecklistNode(previousTree, id, patch),
+        )
       }
 
       return { previousTree }
