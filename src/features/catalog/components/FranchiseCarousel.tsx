@@ -4,8 +4,8 @@ import type { FranchiseSummary } from '@/features/catalog/types'
 interface FranchiseCarouselProps {
   title: string
   items: FranchiseSummary[]
-  libraryVersionSet?: Set<number>
-  libraryFranchiseSet?: Set<number>
+  /** Predicado de `useInLibrary` — lo arma la página, no este componente. */
+  isInLibrary?: (franchiseId: number) => boolean
 }
 
 /**
@@ -15,7 +15,7 @@ interface FranchiseCarouselProps {
 export function FranchiseCarousel({
   title,
   items,
-  libraryFranchiseSet,
+  isInLibrary,
 }: FranchiseCarouselProps) {
   if (items.length === 0) return null
 
@@ -24,13 +24,10 @@ export function FranchiseCarousel({
       <h2 className="text-lg font-semibold">{title}</h2>
       <div className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-2 [scrollbar-width:thin]">
         {items.map((franchise) => (
-          <div
-            key={franchise.id}
-            className="w-32 shrink-0 snap-start sm:w-40"
-          >
+          <div key={franchise.id} className="w-32 shrink-0 snap-start sm:w-40">
             <FranchiseCard
               franchise={franchise}
-              inLibrary={libraryFranchiseSet?.has(franchise.id)}
+              inLibrary={isInLibrary?.(franchise.id)}
             />
           </div>
         ))}

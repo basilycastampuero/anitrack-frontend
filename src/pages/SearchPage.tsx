@@ -1,4 +1,3 @@
-import { useMemo } from 'react'
 import { Search } from 'lucide-react'
 import { PageWrapper } from '@/components/layout/PageWrapper'
 import { Button } from '@/components/ui/button'
@@ -12,7 +11,7 @@ import { useCatalogFilters } from '@/features/catalog/hooks/useCatalogFilters'
 import { useFranchiseList } from '@/features/catalog/hooks/useFranchiseList'
 import { useGenres } from '@/features/catalog/hooks/useGenres'
 import { usePlatforms } from '@/features/catalog/hooks/usePlatforms'
-import { useLibraryIndex } from '@/features/lists/hooks/useLibraryIndex'
+import { useInLibrary } from '@/features/lists/hooks/useInLibrary'
 import { t } from '@/i18n/en'
 
 /**
@@ -26,14 +25,9 @@ export default function SearchPage() {
   const query = filters.q?.trim()
 
   const franchises = useFranchiseList(filters, { enabled: Boolean(query) })
-  const library = useLibraryIndex()
+  const library = useInLibrary()
   const genres = useGenres()
   const platforms = usePlatforms()
-
-  const libraryFranchiseSet = useMemo(
-    () => new Set(library.data?.franchiseIds ?? []),
-    [library.data],
-  )
 
   if (!query) {
     return (
@@ -102,7 +96,7 @@ export default function SearchPage() {
               <FranchiseCard
                 key={franchise.id}
                 franchise={franchise}
-                inLibrary={libraryFranchiseSet.has(franchise.id)}
+                inLibrary={library.hasFranchise(franchise.id)}
               />
             ))}
           </div>

@@ -1,4 +1,3 @@
-import { useMemo } from 'react'
 import { PageWrapper } from '@/components/layout/PageWrapper'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -11,31 +10,26 @@ import { useCatalogFilters } from '@/features/catalog/hooks/useCatalogFilters'
 import { useFranchiseList } from '@/features/catalog/hooks/useFranchiseList'
 import { useGenres } from '@/features/catalog/hooks/useGenres'
 import { usePlatforms } from '@/features/catalog/hooks/usePlatforms'
-import { useLibraryIndex } from '@/features/lists/hooks/useLibraryIndex'
+import { useInLibrary } from '@/features/lists/hooks/useInLibrary'
 import { t } from '@/i18n/en'
 
 /** Grid de franquicias del catálogo (doc 06). Filtros vienen de la URL, con el FilterBar como control visual. */
 export default function CatalogPage() {
   const { filters, setFilters, clearFilters } = useCatalogFilters()
   const franchises = useFranchiseList(filters)
-  const library = useLibraryIndex()
+  const library = useInLibrary()
   const genres = useGenres()
   const platforms = usePlatforms()
 
-  const libraryFranchiseSet = useMemo(
-    () => new Set(library.data?.franchiseIds ?? []),
-    [library.data],
-  )
-
   const hasActiveFilters = Boolean(
     filters.q ||
-      filters.contentType ||
-      filters.videoType ||
-      filters.genreIds?.length ||
-      filters.platformIds?.length ||
-      filters.yearFrom ||
-      filters.yearTo ||
-      filters.sort,
+    filters.contentType ||
+    filters.videoType ||
+    filters.genreIds?.length ||
+    filters.platformIds?.length ||
+    filters.yearFrom ||
+    filters.yearTo ||
+    filters.sort,
   )
 
   // El FilterBar se mantiene montado en los 4 estados (doc 06: es "sticky",
@@ -76,9 +70,15 @@ export default function CatalogPage() {
       <PageWrapper className="space-y-6">
         {filterBar}
         <EmptyState
-          title={hasActiveFilters ? t.states.noResultsTitle : t.states.emptyCatalogTitle}
+          title={
+            hasActiveFilters
+              ? t.states.noResultsTitle
+              : t.states.emptyCatalogTitle
+          }
           description={
-            hasActiveFilters ? t.states.noResultsBody : t.states.emptyCatalogBody
+            hasActiveFilters
+              ? t.states.noResultsBody
+              : t.states.emptyCatalogBody
           }
           action={
             hasActiveFilters && (
@@ -100,7 +100,7 @@ export default function CatalogPage() {
           <FranchiseCard
             key={franchise.id}
             franchise={franchise}
-            inLibrary={libraryFranchiseSet.has(franchise.id)}
+            inLibrary={library.hasFranchise(franchise.id)}
           />
         ))}
       </div>
