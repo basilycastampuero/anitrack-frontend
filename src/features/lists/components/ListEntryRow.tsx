@@ -1,8 +1,13 @@
-import { Link2, Play } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { Link2, Pencil, Play } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { EpisodeStepper } from '@/components/ui/EpisodeStepper'
 import { ProgressBar } from '@/components/ui/ProgressBar'
+import { ScoreDisplay } from '@/components/ui/ScoreDisplay'
+import { EntryNotesDialog } from '@/features/lists/components/EntryNotesDialog'
 import { useUpdateEntryProgress } from '@/features/lists/hooks/useUpdateEntryProgress'
+import { isFeatureEnabled } from '@/lib/features'
 import { cn } from '@/lib/utils'
 import { toProgress } from '@/utils/progress'
 import { t } from '@/i18n/en'
@@ -65,6 +70,47 @@ function EntryProgressStepper({
 }
 
 /**
+ * El botón de editar abre el diálogo de notas/puntaje/fechas (3.11). Como el
+ * stepper, solo existe cuando la fila es editable: la vista pública no puede
+ * escribir.
+ */
+function EntryDetailsButton({
+  entry,
+  checklistId,
+}: {
+  entry: VersionEntry
+  checklistId: number
+}) {
+  const [open, setOpen] = useState(false)
+  const triggerRef = useRef<HTMLButtonElement | null>(null)
+
+  return (
+    <>
+      <Button
+        ref={triggerRef}
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="size-7 shrink-0"
+        aria-label={t.lists.entry.editDetails(entry.displayName)}
+        onClick={() => setOpen(true)}
+      >
+        <Pencil className="size-4" aria-hidden />
+      </Button>
+      {open && (
+        <EntryNotesDialog
+          open={open}
+          onOpenChange={setOpen}
+          entry={entry}
+          checklistId={checklistId}
+          onClosed={() => triggerRef.current?.focus()}
+        />
+      )}
+    </>
+  )
+}
+
+/**
  * Fila de un version-link suelto o agrupado bajo una franquicia (doc 06):
  * imagen, nombre, abreviación, `ProgressBar` y, cuando hay `checklistId`, el
  * `EpisodeStepper` con optimistic update (3.7).
@@ -103,11 +149,19 @@ export function ListEntryRow({
               {t.lists.entry.synced}
             </Badge>
           )}
+          {/* Detrás del flag `ratings` (ADR-004): el campo no existe en el
+              backend real, así que contra él no se muestra nada. */}
+          {isFeatureEnabled('ratings') && entry.rating != null && (
+            <ScoreDisplay value={entry.rating} />
+          )}
         </div>
         <ProgressBar progress={progress} />
       </div>
       {checklistId != null && (
-        <EntryProgressStepper entry={entry} checklistId={checklistId} />
+        <>
+          <EntryProgressStepper entry={entry} checklistId={checklistId} />
+          <EntryDetailsButton entry={entry} checklistId={checklistId} />
+        </>
       )}
     </div>
   )

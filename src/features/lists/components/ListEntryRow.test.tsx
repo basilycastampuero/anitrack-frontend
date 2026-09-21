@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { ListEntryRow } from '@/features/lists/components/ListEntryRow'
+import { features } from '@/lib/features'
 import type { ListEntry, VersionEntry } from '@/features/lists/types'
 
 function versionEntry(
@@ -90,5 +91,23 @@ describe('ListEntryRow', () => {
       />,
     )
     expect(screen.getByText('Synced')).toBeInTheDocument()
+  })
+})
+
+describe('ListEntryRow — puntaje detrás del flag (3.11)', () => {
+  afterEach(() => {
+    features.ratings = true
+  })
+
+  it('muestra el puntaje cuando el flag está encendido', () => {
+    render(<ListEntryRow entry={{ ...versionEntry(), rating: 9 }} />)
+    expect(screen.getByText('9 out of 10')).toBeInTheDocument()
+  })
+
+  it('CA: con el flag apagado no queda ni rastro, aunque el entry traiga rating', () => {
+    features.ratings = false
+    render(<ListEntryRow entry={{ ...versionEntry(), rating: 9 }} />)
+    expect(screen.queryByText('9 out of 10')).not.toBeInTheDocument()
+    expect(screen.queryByText('9')).not.toBeInTheDocument()
   })
 })

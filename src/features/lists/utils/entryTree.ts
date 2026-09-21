@@ -89,3 +89,47 @@ export function patchEntryProgress(
 
   return changed ? result : entries
 }
+
+/** Campos del entry que se editan sin tocar el progreso ni el agregado. */
+export type EntryMetaPatch = Pick<
+  ListEntry,
+  'notes' | 'rating' | 'startedAt' | 'finishedAt'
+>
+
+/**
+ * Hermano de `patchEntryProgress` para los campos que **no** mueven el
+ * agregado del padre: notas, puntaje y fechas. Por eso no hay delta que
+ * aplicar acá — el `[S1 12/25]` del franchise-link sale de `watchedEpisodes` y
+ * `version_episodes`, y ninguno de estos campos lo toca.
+ *
+ * Mismo structural sharing: solo el entry editado —y su padre, si es hijo de
+ * un grupo— cambian de identidad.
+ */
+export function patchEntryFields(
+  entries: ListEntry[],
+  linkId: number,
+  patch: Partial<EntryMetaPatch>,
+): ListEntry[] {
+  let changed = false
+
+  const result = entries.map((entry) => {
+    if (entry.linkId === linkId) {
+      changed = true
+      return { ...entry, ...patch }
+    }
+
+    const children = entry.childEntries
+    if (!children) return entry
+    const index = children.findIndex((child) => child.linkId === linkId)
+    if (index === -1) return entry
+    const child = children[index]
+    if (!child) return entry
+
+    changed = true
+    const nextChildren = [...children]
+    nextChildren[index] = { ...child, ...patch }
+    return { ...entry, childEntries: nextChildren }
+  })
+
+  return changed ? result : entries
+}
