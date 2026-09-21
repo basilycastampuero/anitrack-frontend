@@ -14,6 +14,8 @@ interface ChecklistTreeItemProps {
   onToggleExpand: (id: number) => void
   onSelect: (id: number) => void
   onKeyDown: (event: React.KeyboardEvent<HTMLLIElement>, id: number) => void
+  /** Sin menú de acciones: el nodo solo se selecciona (ver `ChecklistTree`). */
+  compact?: boolean
 }
 
 /**
@@ -36,6 +38,7 @@ export function ChecklistTreeItem({
   onToggleExpand,
   onSelect,
   onKeyDown,
+  compact = false,
 }: ChecklistTreeItemProps) {
   const hasChildren = node.children.length > 0
   const expanded = hasChildren && isExpanded(node.id)
@@ -67,7 +70,10 @@ export function ChecklistTreeItem({
         // la navegación del árbol (doc 12 §3.5b, riesgo #2) — por eso el
         // corte pasa ACÁ, antes de delegar a `onKeyDown` (que además tiene su
         // propio `stopPropagation` para el bug de burbujeo entre niveles).
-        if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+        if (
+          !compact &&
+          (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10'))
+        ) {
           e.preventDefault()
           e.stopPropagation()
           setMenuOpen(true)
@@ -84,7 +90,9 @@ export function ChecklistTreeItem({
       <div
         className={cn(
           'group flex items-center gap-1.5 rounded-md py-1.5 pr-2 text-sm',
-          selected ? 'bg-accent font-medium text-accent-foreground' : 'text-foreground',
+          selected
+            ? 'bg-accent font-medium text-accent-foreground'
+            : 'text-foreground',
         )}
         style={{ paddingLeft: `${(level - 1) * 16 + 4}px` }}
       >
@@ -100,7 +108,10 @@ export function ChecklistTreeItem({
             className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted"
           >
             <ChevronRight
-              className={cn('size-3.5 transition-transform', expanded && 'rotate-90')}
+              className={cn(
+                'size-3.5 transition-transform',
+                expanded && 'rotate-90',
+              )}
             />
           </button>
         ) : (
@@ -109,14 +120,18 @@ export function ChecklistTreeItem({
         <Folder className="size-4 shrink-0 text-muted-foreground" aria-hidden />
         <span className="min-w-0 flex-1 truncate">{node.name}</span>
         {node.linkCount > 0 && (
-          <span className="shrink-0 text-xs text-muted-foreground">{node.linkCount}</span>
+          <span className="shrink-0 text-xs text-muted-foreground">
+            {node.linkCount}
+          </span>
         )}
-        <ChecklistNodeActions
-          node={node}
-          open={menuOpen}
-          onOpenChange={setMenuOpen}
-          onClosed={() => liRef.current?.focus()}
-        />
+        {!compact && (
+          <ChecklistNodeActions
+            node={node}
+            open={menuOpen}
+            onOpenChange={setMenuOpen}
+            onClosed={() => liRef.current?.focus()}
+          />
+        )}
       </div>
 
       {hasChildren && expanded && (
@@ -133,6 +148,7 @@ export function ChecklistTreeItem({
               onToggleExpand={onToggleExpand}
               onSelect={onSelect}
               onKeyDown={onKeyDown}
+              compact={compact}
             />
           ))}
         </ul>

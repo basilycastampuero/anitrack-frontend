@@ -1,3 +1,4 @@
+import { ApiError } from '@/types/api.types'
 import type { ContentType } from '@/types/media.types'
 
 /** Carpeta de checklist del usuario (doc 04). Árbol recursivo. */
@@ -113,4 +114,38 @@ export function isVersionEntry(entry: ListEntry): entry is VersionEntry {
 export type VersionEntry = ListEntry & {
   kind: 'version'
   version: NonNullable<ListEntry['version']>
+}
+
+/** Una aparición previa de la versión, con la lista donde vive (doc 04, `409`). */
+export interface ExistingLink {
+  entry: ListEntry
+  checklistId: number
+  checklistName: string
+}
+
+/**
+ * `409 ALREADY_LINKED` ya parseado (doc 15 §3.3). `ApiError.detail` es
+ * `unknown` a propósito, y este es el único error del contrato cuyo payload
+ * alimenta una decisión del usuario — así que se valida donde se valida todo
+ * lo demás, en el service con Zod, y el componente nunca hace `as` sobre
+ * `detail`.
+ *
+ * Si el payload no valida, el service deja pasar el `ApiError` crudo: el
+ * wizard cae igual al paso de conflicto, sin la lista de apariciones, y
+ * ofrece solo "agregar igual / cancelar". Degrada, no rompe.
+ */
+export class AlreadyLinkedError extends ApiError {
+  readonly existing: ExistingLink[]
+
+  constructor(source: ApiError, existing: ExistingLink[]) {
+    super(
+      source.code,
+      source.message,
+      source.status,
+      source.detail,
+      source.field,
+    )
+    this.name = 'AlreadyLinkedError'
+    this.existing = existing
+  }
 }

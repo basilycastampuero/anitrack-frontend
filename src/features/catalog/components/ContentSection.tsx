@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Film, Gamepad2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -5,7 +6,7 @@ import { ExpandableText } from '@/components/common/ExpandableText'
 import { VersionsTable } from '@/features/catalog/components/VersionsTable'
 import { contentPath } from '@/utils/slug'
 import { VIDEO_TYPE_LABELS } from '@/types/media.types'
-import type { ContentDetail } from '@/features/catalog/types'
+import type { ContentDetail, VersionDetail } from '@/features/catalog/types'
 
 interface ContentSectionProps {
   content: ContentDetail
@@ -13,6 +14,8 @@ interface ContentSectionProps {
   franchiseName: string
   /** false en la página de detalle del propio content, para no autoenlazarse. */
   linkToDetail?: boolean
+  /** Se pasa tal cual a `VersionsTable`: la arma la página, no este componente. */
+  renderVersionAction?: (version: VersionDetail) => ReactNode
 }
 
 /**
@@ -25,8 +28,11 @@ export function ContentSection({
   franchiseId,
   franchiseName,
   linkToDetail = true,
+  renderVersionAction,
 }: ContentSectionProps) {
-  const videoTypeLabel = content.videoType ? VIDEO_TYPE_LABELS[content.videoType] : null
+  const videoTypeLabel = content.videoType
+    ? VIDEO_TYPE_LABELS[content.videoType]
+    : null
   const TypeIcon = content.type === 'G' ? Gamepad2 : Film
 
   return (
@@ -52,20 +58,32 @@ export function ContentSection({
           <div className="flex flex-wrap items-center gap-2">
             {linkToDetail ? (
               <Link
-                to={contentPath(franchiseId, franchiseName, content.id, content.name)}
+                to={contentPath(
+                  franchiseId,
+                  franchiseName,
+                  content.id,
+                  content.name,
+                )}
                 className="text-lg font-semibold text-foreground hover:text-primary hover:underline"
               >
                 {content.name}
               </Link>
             ) : (
-              <h2 className="text-lg font-semibold text-foreground">{content.name}</h2>
+              <h2 className="text-lg font-semibold text-foreground">
+                {content.name}
+              </h2>
             )}
-            {videoTypeLabel && <Badge variant="secondary">{videoTypeLabel}</Badge>}
+            {videoTypeLabel && (
+              <Badge variant="secondary">{videoTypeLabel}</Badge>
+            )}
           </div>
           <ExpandableText text={content.description} />
         </div>
       </div>
-      <VersionsTable versions={content.versions} />
+      <VersionsTable
+        versions={content.versions}
+        renderAction={renderVersionAction}
+      />
     </section>
   )
 }

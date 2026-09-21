@@ -12,6 +12,7 @@ import {
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb'
 import { ContentSection } from '@/features/catalog/components/ContentSection'
+import { AddToListButton } from '@/features/lists/components/AddToListButton'
 import { useContentDetail } from '@/features/catalog/hooks/useContentDetail'
 import { parseIdParam, franchisePath } from '@/utils/slug'
 import { paths } from '@/router/paths'
@@ -50,7 +51,10 @@ export default function ContentDetailPage() {
   }
 
   if (content.isError) {
-    if (content.error instanceof ApiError && content.error.code === 'NOT_FOUND') {
+    if (
+      content.error instanceof ApiError &&
+      content.error.code === 'NOT_FOUND'
+    ) {
       return (
         <PageWrapper>
           <EmptyState
@@ -97,6 +101,17 @@ export default function ContentDetailPage() {
         franchiseId={data.franchise.id}
         franchiseName={data.franchise.name}
         linkToDetail={false}
+        // Sin `franchiseNames`: el detalle de content solo trae
+        // `{ id, name, imageUrl }` de su franquicia (doc 04), así que el
+        // nombre del franchise-link lo elige el backend. Es opcional por
+        // contrato (§6.1): solo hace falta si el franchise-link se crea.
+        renderVersionAction={(version) => (
+          <AddToListButton
+            versions={data.versions}
+            versionId={version.id}
+            contentNames={data.alternativeNames}
+          />
+        )}
       />
     </PageWrapper>
   )
