@@ -1,7 +1,12 @@
 import { http, HttpResponse, delay } from 'msw'
 import type { ApiErrorCode } from '@/types/api.types'
 import type { CatalogFilters } from '@/features/catalog/types'
-import type { ChecklistNode, ListEntry } from '@/features/lists/types'
+import type {
+  ChecklistNode,
+  CreateLinkRequest,
+  ListEntry,
+  UpdateLinkRequest,
+} from '@/features/lists/types'
 import { genres, platforms, companies } from '@/mocks/seed/masters'
 import { franchises, allContents } from '@/mocks/seed/franchises'
 import { filterFranchises, searchHits } from '@/mocks/seed/derive'
@@ -11,9 +16,22 @@ import {
   mockCredentials,
   checklistsByUser,
   entriesByChecklist,
-  libraryIndexByUser,
   profilesByUser,
+  type SeedChecklistNode,
 } from '@/mocks/seed/lists'
+import {
+  aggregateProgress,
+  collectSubtreeIds,
+  computeStats,
+  deriveLibraryIndex,
+  findAltName,
+  findChecklist,
+  locateEntries,
+  publishedForest,
+  removeChecklist,
+  resolveVersion,
+  toChecklistTree,
+} from '@/mocks/derive/lists'
 
 const BASE = '/api/v1'
 const url = (path: string) => `${BASE}${path}`
@@ -30,6 +48,7 @@ let currentUserId: number | null = DEFAULT_MOCK_USER_ID
  */
 export function resetMockSession(): void {
   currentUserId = DEFAULT_MOCK_USER_ID
+  nextLinkId = FIRST_LINK_ID
 }
 
 const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
@@ -71,12 +90,19 @@ async function simulate(request: Request): Promise<Response | null> {
 function parseFilters(request: Request): CatalogFilters {
   const params = new URL(request.url).searchParams
   const csv = (v: string | null) =>
-    v ? v.split(',').map(Number).filter((n) => !Number.isNaN(n)) : undefined
+    v
+      ? v
+          .split(',')
+          .map(Number)
+          .filter((n) => !Number.isNaN(n))
+      : undefined
   const num = (v: string | null) => (v ? Number(v) : undefined)
   return {
     q: params.get('q') ?? undefined,
-    contentType: (params.get('contentType') as CatalogFilters['contentType']) ?? undefined,
-    videoType: (params.get('videoType') as CatalogFilters['videoType']) ?? undefined,
+    contentType:
+      (params.get('contentType') as CatalogFilters['contentType']) ?? undefined,
+    videoType:
+      (params.get('videoType') as CatalogFilters['videoType']) ?? undefined,
     genreIds: csv(params.get('genreIds')),
     platformIds: csv(params.get('platformIds')),
     yearFrom: num(params.get('yearFrom')),
@@ -91,34 +117,54 @@ function requireUser(): number | null {
 }
 
 /**
- * `checklistsByUser` es un árbol (doc 04: `children` anida sub-carpetas), no
- * una lista plana. Buscar/borrar solo en el nivel superior deja fuera
- * cualquier nodo anidado (p. ej. el seed tiene "All-time" bajo "Favorites",
- * ver `mocks/seed/lists.ts`) — estos dos helpers recorren el árbol completo,
- * los usan PATCH, DELETE y POST (para `parentId`).
+ * Los ids de link del seed van del 5000 al 5007; los que crea el mock arrancan
+ * arriba de eso. `Date.now()` no servía: dos links creados en el mismo
+ * milisegundo —cosa que pasa en un test— salían con el mismo id.
  */
-function findChecklistNode(nodes: ChecklistNode[], id: number): ChecklistNode | null {
-  for (const node of nodes) {
-    if (node.id === id) return node
-    const found = findChecklistNode(node.children, id)
-    if (found) return found
-  }
-  return null
+const FIRST_LINK_ID = 6000
+let nextLinkId = FIRST_LINK_ID
+function newLinkId(): number {
+  return nextLinkId++
 }
 
-/** Quita el nodo `id` de donde esté en el árbol (in-place). `true` si lo encontró. */
-function removeChecklistNode(nodes: ChecklistNode[], id: number): boolean {
-  const index = nodes.findIndex((n) => n.id === id)
-  if (index !== -1) {
-    nodes.splice(index, 1)
-    return true
-  }
-  return nodes.some((n) => removeChecklistNode(n.children, id))
+/** Todas las carpetas del usuario logueado. */
+function userTree(uid: number): SeedChecklistNode[] {
+  return checklistsByUser[uid] ?? []
 }
 
-/** El propio id de `node` más el de todos sus descendientes (recursivo). */
-function collectSubtreeIds(node: ChecklistNode): number[] {
-  return [node.id, ...node.children.flatMap(collectSubtreeIds)]
+/**
+ * Recalcula el agregado de cada franchise-link del usuario. El backend lo hace
+ * en `compute_show_name` cada vez que cambia un hijo; acá se recorre todo
+ * porque es barato y evita olvidarse de un padre afectado.
+ */
+function refreshAggregates(roots: SeedChecklistNode[]): void {
+  for (const { entry } of locateEntries(roots, entriesByChecklist)) {
+    if (entry.kind === 'franchise') {
+      entry.aggregatedProgress = aggregateProgress(entry.childEntries ?? [])
+    }
+  }
+}
+
+/**
+ * Los otros links sincronizados de la misma versión. En Odoo la relación son
+ * filas de `ll.checklist.link.copy` y `Link.write` propaga `lv_episodes` por
+ * ahí; el mock la aproxima con "mismo `versionId` y ambos `isSynced`", que es
+ * el invariante observable desde el contrato.
+ */
+function syncedSiblings(
+  roots: SeedChecklistNode[],
+  entry: ListEntry,
+): ListEntry[] {
+  const versionId = entry.version?.versionId
+  if (versionId == null || entry.version?.isSynced !== true) return []
+  return locateEntries(roots, entriesByChecklist)
+    .map((location) => location.entry)
+    .filter(
+      (other) =>
+        other.linkId !== entry.linkId &&
+        other.version?.isSynced === true &&
+        other.version.versionId === versionId,
+    )
 }
 
 export const handlers = [
@@ -197,7 +243,8 @@ export const handlers = [
     if (err) return err
     const body = (await request.json()) as { login?: string; password?: string }
     const user = users.find((u) => u.email === body.login)
-    const validPassword = !!user && mockCredentials[user.email] === body.password
+    const validPassword =
+      !!user && mockCredentials[user.email] === body.password
     // Mensaje genérico a propósito (doc 12 §5, 3.2): no le regalamos a nadie
     // si el email existe o no.
     if (!user || !validPassword) {
@@ -231,7 +278,10 @@ export const handlers = [
       password?: string
     }
     if (!body.name || !body.email || !body.password) {
-      return errorResponse('VALIDATION', 'Name, email and password are required')
+      return errorResponse(
+        'VALIDATION',
+        'Name, email and password are required',
+      )
     }
     if (users.some((u) => u.email === body.email)) {
       return errorResponse('VALIDATION', 'Email is already registered', {
@@ -257,7 +307,10 @@ export const handlers = [
     if (err) return err
     const id = requireUser()
     if (!id) return errorResponse('UNAUTHORIZED', 'Login required')
-    return HttpResponse.json({ items: checklistsByUser[id] ?? [] })
+    // `linkCount` se deriva de los entries reales (ADR-022), no sale del seed.
+    return HttpResponse.json({
+      items: toChecklistTree(userTree(id), entriesByChecklist),
+    })
   }),
 
   http.post(url('/me/checklists'), async ({ request }) => {
@@ -266,14 +319,16 @@ export const handlers = [
     if (err) return err
     const uid = requireUser()
     if (!uid) return errorResponse('UNAUTHORIZED', 'Login required')
-    const body = (await request.json()) as Partial<ChecklistNode> & { parentId?: number }
-    const roots = checklistsByUser[uid] ?? []
-    const parent = body.parentId ? findChecklistNode(roots, body.parentId) : null
+    const body = (await request.json()) as Partial<ChecklistNode> & {
+      parentId?: number
+    }
+    const roots = userTree(uid)
+    const parent = body.parentId ? findChecklist(roots, body.parentId) : null
     if (body.parentId && !parent) {
       return errorResponse('NOT_FOUND', 'Parent checklist not found')
     }
     const siblings = parent ? parent.children : roots
-    const checklist: ChecklistNode = {
+    const checklist: SeedChecklistNode = {
       id: Date.now(),
       name: body.name ?? 'New list',
       description: body.description ?? null,
@@ -282,14 +337,16 @@ export const handlers = [
       sortingMode: body.sortingMode ?? 'C',
       isPublished: body.isPublished ?? false,
       children: [],
-      linkCount: 0,
     }
     if (parent) {
       parent.children = [...parent.children, checklist]
     } else {
       checklistsByUser[uid] = [...roots, checklist]
     }
-    return HttpResponse.json({ checklist }, { status: 201 })
+    return HttpResponse.json(
+      { checklist: { ...checklist, linkCount: 0 } },
+      { status: 201 },
+    )
   }),
 
   http.patch(url('/me/checklists/:id'), async ({ request, params }) => {
@@ -298,10 +355,16 @@ export const handlers = [
     if (err) return err
     const uid = requireUser()
     if (!uid) return errorResponse('UNAUTHORIZED', 'Login required')
-    const list = findChecklistNode(checklistsByUser[uid] ?? [], Number(params.id))
+    const list = findChecklist(userTree(uid), Number(params.id))
     if (!list) return errorResponse('NOT_FOUND', 'Checklist not found')
     Object.assign(list, await request.json())
-    return HttpResponse.json({ checklist: list })
+    return HttpResponse.json({
+      checklist: {
+        ...list,
+        linkCount: (entriesByChecklist[list.id] ?? []).length,
+        children: toChecklistTree(list.children, entriesByChecklist),
+      },
+    })
   }),
 
   http.delete(url('/me/checklists/:id'), async ({ request, params }) => {
@@ -315,8 +378,8 @@ export const handlers = [
     // ver useDeleteChecklist.ts): hay que borrar los entries de TODO el
     // subárbol, no solo los del nodo apuntado, o quedan huérfanos accesibles
     // por un id de checklist que ya no existe (#5 de la revisión).
-    const node = findChecklistNode(checklistsByUser[uid] ?? [], id)
-    const removed = removeChecklistNode(checklistsByUser[uid] ?? [], id)
+    const node = findChecklist(userTree(uid), id)
+    const removed = removeChecklist(userTree(uid), id)
     if (!removed) return errorResponse('NOT_FOUND', 'Checklist not found')
     const idsToClean = node ? collectSubtreeIds(node) : [id]
     for (const cleanId of idsToClean) {
@@ -329,57 +392,233 @@ export const handlers = [
     const err = await simulate(request)
     if (err) return err
     if (!requireUser()) return errorResponse('UNAUTHORIZED', 'Login required')
-    return HttpResponse.json({ items: entriesByChecklist[Number(params.id)] ?? [] })
+    return HttpResponse.json({
+      items: entriesByChecklist[Number(params.id)] ?? [],
+    })
   }),
 
+  /**
+   * Vincular una versión a una carpeta. Replica `action_create_link` del
+   * wizard de Odoo: resuelve nombre, imagen y total de episodios **desde el
+   * catálogo** (nunca del body), agrupa bajo un franchise-link reutilizándolo
+   * si ya existe, y detecta el duplicado antes de crear nada.
+   */
   http.post(url('/me/links'), async ({ request }) => {
     await delay(350)
+    const err = injectedError(request)
+    if (err) return err
     const uid = requireUser()
     if (!uid) return errorResponse('UNAUTHORIZED', 'Login required')
-    const body = (await request.json()) as {
-      versionId: number
-      force?: boolean
+    const body = (await request.json()) as CreateLinkRequest
+    const roots = userTree(uid)
+
+    const target = findChecklist(roots, body.checklistId)
+    if (!target) return errorResponse('NOT_FOUND', 'Checklist not found')
+
+    const ref = resolveVersion(body.versionId)
+    if (!ref) return errorResponse('NOT_FOUND', 'Version not found')
+
+    // El nombre a mostrar sale de un AltName del content, y tiene que ser de
+    // ESE content: si no, el usuario podría bautizar su link con cualquier
+    // nombre de la base (doc 15 §6.1).
+    const chosenName = findAltName(
+      ref.content.alternativeNames,
+      body.displayNameId,
+    )
+    if (!chosenName) {
+      return errorResponse(
+        'VALIDATION',
+        'displayNameId does not belong to this content',
+        {
+          field: 'displayNameId',
+        },
+      )
     }
-    const index = libraryIndexByUser[uid] ?? { versionIds: [], franchiseIds: [] }
-    if (index.versionIds.includes(body.versionId) && !body.force) {
-      return errorResponse('ALREADY_LINKED', 'Version already linked', {
-        existing: [],
-      })
+
+    // 409 con el contexto de la lista (doc 04): sin el nombre de la carpeta,
+    // elegir entre "agregar igual" y "copia sincronizada" es a ciegas.
+    if (!body.force && body.syncWithLinkId == null) {
+      const clashes = locateEntries(roots, entriesByChecklist).filter(
+        (location) => location.entry.version?.versionId === body.versionId,
+      )
+      if (clashes.length > 0) {
+        return errorResponse('ALREADY_LINKED', 'Version already linked', {
+          existing: clashes.map((location) => ({
+            entry: location.entry,
+            checklistId: location.checklistId,
+            checklistName: location.checklistName,
+          })),
+        })
+      }
     }
+
+    // Copia sincronizada: el link original tiene que ser del propio usuario.
+    // `locateEntries` solo recorre su árbol, así que un id ajeno da 404 y no
+    // se filtra si existe o no (mismo criterio que el backend, ADR-014).
+    let source: ListEntry | null = null
+    if (body.syncWithLinkId != null) {
+      source =
+        locateEntries(roots, entriesByChecklist).find(
+          (location) => location.entry.linkId === body.syncWithLinkId,
+        )?.entry ?? null
+      if (!source?.version)
+        return errorResponse('NOT_FOUND', 'Link to sync not found')
+      source.version.isSynced = true
+    }
+
+    const entries = (entriesByChecklist[body.checklistId] ??= [])
     const entry: ListEntry = {
-      linkId: Date.now(),
+      linkId: newLinkId(),
       kind: 'version',
-      displayName: 'New link',
-      imageUrl: null,
+      displayName: source?.displayName ?? chosenName.name,
+      imageUrl: ref.content.imageUrl ?? ref.franchise.imageUrl,
       order: 0,
-      contentType: 'V',
-      franchiseId: 0,
+      contentType: ref.content.type,
+      franchiseId: ref.franchise.id,
       notes: null,
       version: {
         versionId: body.versionId,
-        contentId: 0,
-        abbreviation: null,
-        watchedEpisodes: 0,
-        totalEpisodes: 0,
-        isSynced: false,
+        contentId: ref.content.id,
+        abbreviation: source?.version?.abbreviation ?? ref.content.abbreviation,
+        watchedEpisodes: source?.version?.watchedEpisodes ?? 0,
+        totalEpisodes: ref.version.episodes,
+        isSynced: source != null,
       },
     }
-    index.versionIds = [...index.versionIds, body.versionId]
-    libraryIndexByUser[uid] = index
+
+    if (body.groupUnderFranchise) {
+      // El franchise-link se reutiliza por (carpeta, franquicia, contentType),
+      // las mismas tres claves con las que lo busca el `onchange` del wizard.
+      let group = entries.find(
+        (candidate) =>
+          candidate.kind === 'franchise' &&
+          candidate.franchiseId === ref.franchise.id &&
+          candidate.contentType === ref.content.type,
+      )
+      if (!group) {
+        const franchiseName =
+          body.franchiseDisplayNameId == null
+            ? null
+            : findAltName(
+                ref.franchise.alternativeNames,
+                body.franchiseDisplayNameId,
+              )
+        if (body.franchiseDisplayNameId != null && !franchiseName) {
+          return errorResponse(
+            'VALIDATION',
+            'franchiseDisplayNameId does not belong to this franchise',
+            { field: 'franchiseDisplayNameId' },
+          )
+        }
+        group = {
+          linkId: newLinkId(),
+          kind: 'franchise',
+          displayName: franchiseName?.name ?? ref.franchise.name,
+          imageUrl: ref.franchise.imageUrl,
+          order: entries.length,
+          contentType: ref.content.type,
+          franchiseId: ref.franchise.id,
+          notes: null,
+          showProgress: true,
+          childEntries: [],
+          aggregatedProgress: { groups: [] },
+        }
+        entries.push(group)
+      }
+      const children = (group.childEntries ??= [])
+      entry.order = children.length
+      children.push(entry)
+      group.aggregatedProgress = aggregateProgress(children)
+    } else {
+      entry.order = entries.length
+      entries.push(entry)
+    }
+
     return HttpResponse.json({ entry }, { status: 201 })
   }),
 
-  http.patch(url('/me/links/:id'), async ({ request }) => {
+  /**
+   * Devuelve el `ListEntry` completo, no el eco del body: es lo que consume el
+   * optimistic update de 3.7 al hacer `onSettled`. Si el link es sincronizado,
+   * mueve también sus copias, que viven en OTRAS carpetas del usuario.
+   */
+  http.patch(url('/me/links/:id'), async ({ request, params }) => {
     await delay(150)
-    if (!requireUser()) return errorResponse('UNAUTHORIZED', 'Login required')
-    const patch = (await request.json()) as Record<string, unknown>
-    // Eco optimista: en Sprint 3 el backend/MSW recalcula agregados reales.
-    return HttpResponse.json({ entry: { ...patch } })
+    const err = injectedError(request)
+    if (err) return err
+    const uid = requireUser()
+    if (!uid) return errorResponse('UNAUTHORIZED', 'Login required')
+    const roots = userTree(uid)
+    const located = locateEntries(roots, entriesByChecklist).find(
+      (location) => location.entry.linkId === Number(params.id),
+    )
+    if (!located) return errorResponse('NOT_FOUND', 'Link not found')
+
+    const patch = (await request.json()) as UpdateLinkRequest
+    if (patch.watchedEpisodes != null && patch.watchedEpisodes < 0) {
+      return errorResponse('VALIDATION', 'watchedEpisodes must be >= 0', {
+        field: 'watchedEpisodes',
+      })
+    }
+
+    // `"clave" in patch` y no `!= null`: el contrato distingue "no lo mando"
+    // de "lo mando en null" (borrar las notas, por ejemplo).
+    const { entry } = located
+    if (patch.displayName != null) entry.displayName = patch.displayName
+    if ('notes' in patch) entry.notes = patch.notes ?? null
+    if (patch.order != null) entry.order = patch.order
+    if (patch.showProgress != null) entry.showProgress = patch.showProgress
+    if ('rating' in patch) entry.rating = patch.rating ?? null
+    if ('startedAt' in patch) entry.startedAt = patch.startedAt ?? null
+    if ('finishedAt' in patch) entry.finishedAt = patch.finishedAt ?? null
+
+    const version = entry.version
+    if (version) {
+      if ('abbreviation' in patch)
+        version.abbreviation = patch.abbreviation ?? null
+      if (patch.watchedEpisodes != null) {
+        version.watchedEpisodes = patch.watchedEpisodes
+        for (const sibling of syncedSiblings(roots, entry)) {
+          if (sibling.version)
+            sibling.version.watchedEpisodes = patch.watchedEpisodes
+        }
+      }
+    }
+
+    refreshAggregates(roots)
+    return HttpResponse.json({ entry })
   }),
 
-  http.delete(url('/me/links/:id'), async () => {
+  http.delete(url('/me/links/:id'), async ({ request, params }) => {
     await delay(150)
-    if (!requireUser()) return errorResponse('UNAUTHORIZED', 'Login required')
+    const err = injectedError(request)
+    if (err) return err
+    const uid = requireUser()
+    if (!uid) return errorResponse('UNAUTHORIZED', 'Login required')
+    const roots = userTree(uid)
+    const located = locateEntries(roots, entriesByChecklist).find(
+      (location) => location.entry.linkId === Number(params.id),
+    )
+    if (!located) return errorResponse('NOT_FOUND', 'Link not found')
+
+    const { entry, parent, checklistId } = located
+    const top = entriesByChecklist[checklistId] ?? []
+    const siblings = parent?.childEntries ?? top
+    const at = siblings.findIndex(
+      (candidate) => candidate.linkId === entry.linkId,
+    )
+    if (at !== -1) siblings.splice(at, 1)
+
+    // El franchise-link que se queda sin hijos se borra con el último de
+    // ellos, igual que `action_remove` en Odoo.
+    if (parent && (parent.childEntries?.length ?? 0) === 0) {
+      const parentAt = top.findIndex(
+        (candidate) => candidate.linkId === parent.linkId,
+      )
+      if (parentAt !== -1) top.splice(parentAt, 1)
+    }
+
+    refreshAggregates(roots)
     return new HttpResponse(null, { status: 204 })
   }),
 
@@ -389,7 +628,7 @@ export const handlers = [
     const id = requireUser()
     if (!id) return errorResponse('UNAUTHORIZED', 'Login required')
     return HttpResponse.json(
-      libraryIndexByUser[id] ?? { versionIds: [], franchiseIds: [] },
+      deriveLibraryIndex(userTree(id), entriesByChecklist),
     )
   }),
 
@@ -397,9 +636,21 @@ export const handlers = [
   http.get(url('/users/:id/profile'), async ({ request, params }) => {
     const err = await simulate(request)
     if (err) return err
-    const profile = profilesByUser[Number(params.id)]
-    if (!profile) return errorResponse('NOT_FOUND', 'Profile not found')
-    return HttpResponse.json({ profile })
+    const ownerId = Number(params.id)
+    const identity = profilesByUser[ownerId]
+    if (!identity) return errorResponse('NOT_FOUND', 'Profile not found')
+    const published = publishedForest(
+      toChecklistTree(checklistsByUser[ownerId] ?? [], entriesByChecklist),
+    )
+    return HttpResponse.json({
+      profile: {
+        ...identity,
+        // Solo listas publicadas, o las stats filtrarían el tamaño de las
+        // privadas en un endpoint sin sesión (doc 04).
+        stats: computeStats(published, entriesByChecklist),
+        publishedChecklists: published,
+      },
+    })
   }),
 
   http.get(
@@ -407,13 +658,17 @@ export const handlers = [
     async ({ request, params }) => {
       const err = await simulate(request)
       if (err) return err
-      const checklistId = Number(params.checklistId)
-      const owner = checklistsByUser[Number(params.id)] ?? []
-      const found = owner.find((c) => c.id === checklistId)
-      if (found && !found.isPublished) {
-        return errorResponse('FORBIDDEN', 'List is private')
-      }
-      return HttpResponse.json({ items: entriesByChecklist[checklistId] ?? [] })
+      // Búsqueda recursiva: una lista privada ANIDADA bajo una publicada
+      // también tiene que quedar fuera. Antes solo se miraba el nivel raíz.
+      const node = findChecklist(
+        checklistsByUser[Number(params.id)] ?? [],
+        Number(params.checklistId),
+      )
+      // 404 y no 403 (doc 04): un 403 confirma que el id existe, y un id de
+      // checklist privada es adivinable a partir de los públicos vecinos.
+      if (!node?.isPublished)
+        return errorResponse('NOT_FOUND', 'Checklist not found')
+      return HttpResponse.json({ items: entriesByChecklist[node.id] ?? [] })
     },
   ),
 ]
