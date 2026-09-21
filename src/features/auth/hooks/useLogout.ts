@@ -17,11 +17,11 @@ import { useSessionStore } from '@/store/sessionStore'
  * "logueado" localmente tras pedir explícitamente salir es peor que limpiar
  * de más.
  *
- * Nota: doc 12 también menciona vaciar el prefijo `profile`. Hoy el feature
- * `profile` no tiene ningún hook de TanStack Query (solo tipos, ver
- * src/features/profile/), así que no hay nada que remover todavía. Cuando
- * agregue queries de sesión (p. ej. "mi perfil" en Settings), sumar su
- * `queryKeys.ts` acá.
+ * El prefijo `profile` que menciona el doc 12 **no** se limpia acá, y ahora
+ * que ese feature sí tiene queries (3.10) la decisión es explícita: un perfil
+ * público es dato público, visible sin sesión, así que removerlo solo costaría
+ * un refetch de algo que el visitante puede ver igual. Solo se vacía el cache
+ * privado (doc 15 §3.5).
  */
 export function useLogout() {
   const clearSession = useSessionStore((s) => s.clearSession)

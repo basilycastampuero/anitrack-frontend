@@ -31,7 +31,8 @@ export const en = {
     previous: 'Previous',
     next: 'Next',
     /** Primer string con interpolación: se declara como función tipada. */
-    pageOf: (page: number, totalPages: number) => `Page ${page} of ${totalPages}`,
+    pageOf: (page: number, totalPages: number) =>
+      `Page ${page} of ${totalPages}`,
     readMore: 'Read more',
     readLess: 'Read less',
   },
@@ -213,7 +214,8 @@ export const en = {
       undo: 'Undo',
       failed: 'Could not add it. Try again.',
       undoFailed: 'Could not undo that. Try again.',
-      episodes: (count: number) => (count > 0 ? `${count} episodes` : 'Ongoing'),
+      episodes: (count: number) =>
+        count > 0 ? `${count} episodes` : 'Ongoing',
     },
     menu: {
       trigger: (name: string) => `Actions for ${name}`,
@@ -260,6 +262,33 @@ export const en = {
       publishFailed: 'Could not update the list. Try again.',
     },
   },
+  profile: {
+    statsTitle: 'Stats',
+    totalEntries: 'Titles tracked',
+    episodesWatched: 'Episodes watched',
+    distribution: 'Games vs videos',
+    games: 'Games',
+    videos: 'Videos',
+    /** Etiqueta accesible de la dona: el SVG va `aria-hidden`. */
+    distributionLabel: (games: number, videos: number) =>
+      `${videos} videos and ${games} games`,
+    publishedLists: 'Public lists',
+    entriesCount: (count: number) =>
+      `${count} ${count === 1 ? 'entry' : 'entries'}`,
+    emptyTitle: 'Nothing public yet',
+    emptyBody: 'This user has not published any list.',
+    ownBannerTitle: 'These lists are public',
+    ownBannerBody: 'Anyone with the link can see the lists you published.',
+    ownBannerCta: 'Manage in settings',
+    notFoundTitle: 'Profile not found',
+    notFoundBody: 'There is no public profile at this address.',
+    listUnavailableTitle: 'List not available',
+    /** A propósito no dice si la lista existe y es privada, o si no existe. */
+    listUnavailableBody: 'This list is private or is no longer available.',
+    listEmptyTitle: 'This list is empty',
+    listEmptyBody: 'Its owner has not added anything yet.',
+    backToProfile: (name: string) => `Back to ${name}`,
+  },
   search: {
     inputLabel: 'Search franchises and titles',
     placeholder: 'Search…',
@@ -270,7 +299,8 @@ export const en = {
     seeAllResults: (q: string) => `See all results for "${q}"`,
     resultsFor: (q: string) => `Results for "${q}"`,
     promptTitle: 'Search the catalog',
-    promptBody: 'Type at least 2 characters in the search bar to find franchises and titles.',
+    promptBody:
+      'Type at least 2 characters in the search bar to find franchises and titles.',
     noResultsTitle: 'No results',
     noResultsBody: (q: string) => `We couldn't find anything for "${q}".`,
   },

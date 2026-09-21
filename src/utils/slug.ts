@@ -53,3 +53,13 @@ export function searchHitPath(hit: {
   }
   return `/franchise/${hit.franchiseId}/content/${hit.id}-${slugify(hit.mainName)}`
 }
+
+/** Ruta al perfil público de un usuario (`paths.profile`). */
+export function profilePath(userId: number): string {
+  return `/profile/${userId}`
+}
+
+/** Ruta a una lista publicada de un usuario (`paths.publicList`). */
+export function publicListPath(userId: number, checklistId: number): string {
+  return `${profilePath(userId)}/list/${checklistId}`
+}
