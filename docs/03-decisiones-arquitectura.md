@@ -785,3 +785,187 @@ por el checkpoint B5. Segunda consecuencia: `/api/v1/images/<id>` sigue siendo
 la URL que emiten los entries, porque las imágenes de un link son siempre
 imágenes de catálogo (la del franchise o la del content); la ruta privada que
 introduce B4 es solo para imágenes que el usuario suba a una checklist propia.
+
+---
+
+## ADR-020 — La `ir.rule` de `ll.checklist.link.copy` exige que **ambos** lados sean del mismo dueño, no cualquiera de los dos
+
+**Contexto.** El Sprint 3b introduce las copias sincronizadas
+(`syncWithLinkId` en `POST /me/links`, doc 04): una versión vinculada en dos
+listas distintas cuyo progreso se mantiene sincronizado. En Odoo eso es una
+fila de `ll.checklist.link.copy` con dos Many2one a `ll.checklist.link`
+(`lc_left_id`, `lc_right_id`), y `Link.write()`
+(`ll_checklist/models/database/link.py`) propaga `lv_episodes`/`lv_abbreviation`
+a través de esas filas, **en ambos sentidos**, con `super().write()`.
+
+La regla de aislamiento de ese modelo se escribió en B1 mirando solo
+`lc_left_id`, y en B4 se amplió a los dos lados con un `'|'` (OR) para arreglar
+un falso-negativo de lectura: una copia propia cuyo link estuviera del lado
+derecho no era visible, así que `isSynced` podía dar `false` de más.
+
+Al diseñar el Sprint 3b (doc 15, §2.2) se revisó qué garantiza realmente ese
+OR, y la conclusión es que **no cierra el agujero de escritura que la propia
+nota de B4 dice cerrar, y abre uno peor**:
+
+- Una fila `(lc_left = mi link, lc_right = link ajeno)` satisface la primera
+  cláusula, así que el `check_access_rule('create')` la deja pasar — igual que
+  antes de B4. Escribir un Many2one no exige permiso de lectura sobre el
+  registro apuntado, así que basta con conocer (o adivinar) un id.
+- Lo que el OR **sí** cambió es que esa fila ahora es visible **desde el otro
+  lado**. Cuando la víctima escriba `lv_episodes` en su propio link,
+  `Link.write` va a recorrer sus `lv_link_right_ids`, encontrar esa fila e
+  intentar escribir en el link ajeno: `AccessError`. Es decir, cualquier
+  usuario puede dejar el link de otro **permanentemente inescribible**. Con la
+  regla anterior (solo `lc_left_id`) la fila era invisible para la víctima y no
+  le rompía nada.
+
+> **Estado de verificación.** Esto es razonamiento sobre el código y sobre la
+> semántica de `ir.rule` en Odoo 17, **no** una prueba empírica: el Odoo local
+> no estaba disponible en la sesión de diseño. La verificación con dos usuarios
+> portal es CA de la tarea B6. Si la prueba lo contradice, este ADR se corrige
+> en vez de dejarse afirmando algo falso.
+
+**Alternativas consideradas.**
+
+1. Dejar el OR y confiar en la validación del controlador. Descartada: el
+   modelo de seguridad del proyecto (ADR-014) eligió a propósito que el
+   aislamiento lo haga el ORM y no la memoria de quien escribe cada endpoint.
+   Dejar la única defensa en el controlador repite el error que ADR-014
+   descartó.
+2. Volver a la regla original (solo `lc_left_id`). Descartada: reintroduce el
+   falso-negativo de `isSynced` que B4 arregló, y sigue permitiendo crear la
+   fila cruzada.
+3. **[Elegida]** Cambiar el `'|'` por el AND implícito: la fila es accesible
+   solo si **los dos** lados pertenecen al usuario. Las filas legítimas
+   siempre lo cumplen (una copia sincronizada vive entre dos listas del mismo
+   usuario), así que el falso-negativo de lectura queda arreglado igual; y una
+   fila cruzada pasa a ser, a la vez, **increable e invisible**.
+
+**Decisión.** Opción 3, más la validación en el controlador como defensa en
+profundidad: `POST /me/links` resuelve `syncWithLinkId` con el ORM del usuario
+(la `ir.rule` de `ll.checklist.link` lo convierte en un `404` si es ajeno)
+**antes** de crear ninguna fila de copia. La regla sigue con
+`groups=[base.group_portal]` y `global="False"`, por el mismo motivo de
+ADR-014 (una regla global le quitó el `unlink` al admin en el spike original).
+
+**Consecuencias.** Positiva: desaparece el vector de denegación de servicio
+cruzado y la fila cruzada deja de poder crearse; el aislamiento sigue siendo
+responsabilidad del ORM. Negativa: una copia cruzada creada desde el backoffice
+por un admin queda invisible para los usuarios portal involucrados, y su
+`isSynced` daría `false` — se acepta, porque esa fila no debería existir y
+crearla es una acción deliberada de administración. Segunda consecuencia: hay
+que probar explícitamente, con **dos** usuarios portal, que la víctima
+conserva la escritura sobre su link después de un intento cruzado; es CA de B6
+y no se puede dar por cerrada la tarea sin ella.
+
+---
+
+## ADR-021 — El optimistic de progreso aplica un **delta** al agregado del padre; el frontend nunca recalcula la agregación
+
+**Contexto.** ADR-018 fijó que `aggregatedProgress` llega **pre-calculado** del
+backend como dato estructurado, y que el frontend solo lo formatea
+(`progress.ts`). El Sprint 3b introduce la primera mutación que lo mueve: subir
+o bajar episodios de un version-link (`PATCH /me/links/:id`, tarea 3.7) cambia
+el `watched` del grupo correspondiente del franchise-link padre.
+
+Durante la ventana optimista (entre el click y la respuesta) no hay valor del
+servidor que usar, y el contrato devuelve el `ListEntry` del link **patcheado**,
+no el del padre. Si el frontend no hace nada, la barra del hijo se mueve al
+instante y el `[S1 03/12]` del encabezado del grupo queda congelado hasta que
+llegue el refetch — visiblemente roto justo en la interacción central del
+producto.
+
+**Alternativas consideradas.**
+
+1. No tocar el agregado en `onMutate` y esperar la reconciliación. Descartada
+   por lo de arriba: es la interacción que se demuestra.
+2. Reimplementar la agregación en TypeScript y recalcular el grupo entero.
+   Descartada: sería una segunda implementación de `compute_show_name`,
+   incluyendo sus dos reglas sutiles (si **alguna** versión del grupo tiene
+   total desconocido, el total del grupo entero pasa a desconocido; los grupos
+   se ordenan por el `lv_record_order` **mínimo**). Es exactamente el drift que
+   ADR-018 evita, y el precedente del proyecto es que ese tipo de duplicación
+   se paga.
+3. **[Elegida]** Aplicar el único cambio que esta mutación puede producir en
+   el agregado: `watched += delta` en el grupo cuya `abbreviation` coincide con
+   la del hijo tocado.
+
+**Decisión.** Opción 3, con su justificación explícita: `total` sale de
+`version_episodes` (catálogo, no lo toca esta mutación) y el orden de los
+grupos sale de `lv_record_order` (tampoco), así que el delta es
+**demostrablemente equivalente** al resultado del backend para *esta*
+mutación — no es una aproximación, y no reimplementa nada. Vive en una función
+pura, `patchEntryProgress` (`src/features/lists/utils/entryTree.ts`), que es lo
+que se testea. `onSettled` invalida siempre, en éxito y en error, igual que
+`useUpdateChecklist`.
+
+Regla asociada, para que esto no se estire: una mutación que **sí** pueda
+cambiar `total` o el orden de los grupos (mover un link entre grupos, cambiar
+su abreviación, borrar un hijo) **no lleva optimistic sobre el agregado** —
+invalida y espera.
+
+Se fija además el fan-out de invalidación de esta mutación, porque con copias
+sincronizadas deja de ser obvio: invalida `entries(checklistId)` y, **solo si
+`entry.version.isSynced`**, el prefijo entero `['lists']` — el backend propaga
+`lv_episodes` a copias que viven en otras carpetas del usuario y el contrato no
+expone sus ids. **No** invalida `tree()` (el `linkCount` no cambia al mover
+episodios) ni `libraryIndex()` (el conjunto de versiones vinculadas tampoco).
+
+**Consecuencias.** Positiva: el encabezado del grupo se mueve en el mismo frame
+que la barra del hijo, sin duplicar la lógica de agregación y sin ampliar el
+contrato. Negativa: el frontend queda con **una** regla del backend codificada
+(cuál es el grupo afectado: el de la misma `abbreviation`), que hay que revisar
+si alguna vez cambia el criterio de agrupación de `compute_show_name`; queda
+cubierta por el checkpoint de contrato del sprint. Segunda consecuencia: si
+`isSynced` es `true`, una pulsación del stepper invalida todas las queries de
+listas activas — aceptable porque el caso es raro y el refetch es liviano; la
+salida si alguna vez pesa es exponer los ids de las copias en el contrato, y
+queda anotada como tal.
+
+---
+
+## ADR-022 — Los contadores derivados del seed de MSW se calculan, no se escriben a mano
+
+**Contexto.** Durante el Sprint 3a aparecieron **cinco** handlers de MSW que
+mentían y hacían pasar tests en falso (bitácora doc 13, "Patrón recurrente del
+sprint"). Al diseñar el 3b aparecieron tres más: `POST /me/links` no inserta el
+entry ni respeta `checklistId`, `PATCH /me/links/:id` devuelve el eco del body
+en vez de un `ListEntry`, y `DELETE /me/links/:id` no borra nada. Y hay una
+categoría relacionada: `linkCount` en `mocks/seed/lists.ts` y las `stats` de
+`profilesByUser` son **constantes escritas a mano**, sin relación causal con
+`entriesByChecklist`.
+
+Mientras la app solo leía, una constante desactualizada era cosmética. Con las
+mutaciones del 3b deja de serlo: la CA de 3.9 es literalmente "se actualiza al
+agregar/quitar", y un contador que nunca cambia la vuelve inverificable.
+
+**Alternativas consideradas.**
+
+1. Seguir a mano y actualizar las constantes cuando haga falta. Descartada: es
+   el statu quo, y es el que produjo ocho falsos verdes.
+2. Que el handler de la mutación actualice el contador junto con el dato
+   (`linkCount++` al crear). Descartada a medias: funciona, pero deja dos
+   fuentes de verdad para el mismo hecho y falla en cuanto una operación
+   cascadea (borrar una carpeta con sub-carpetas y links).
+3. **[Elegida]** Los contadores y agregados del mock se **derivan** de los
+   datos que los producen, con funciones puras, cada vez que un handler los
+   emite: `linkCount` desde `entriesByChecklist`, las `stats` del perfil desde
+   los entries de las listas publicadas, `libraryIndex` desde los entries.
+
+**Decisión.** Opción 3, en `src/mocks/derive/lists.ts`, y la regla general
+que la acompaña: **un handler de mutación de MSW tiene que mantener los
+invariantes del modelo real, no solo devolver una forma plausible**; y cada
+mutación nueva necesita al menos un test que **fuerce al mock a trabajar**
+(crear anidado, agrupar bajo franquicia, propagar a una copia sincronizada,
+borrar el padre huérfano), no un test de "la mutación se llamó".
+
+**Consecuencias.** Positiva: desaparece la clase entera de falso verde que
+viene costando tiempo desde el Sprint 3a, y las CA de 3.9/3.10 pasan a ser
+verificables. Negativa —y hay que decirla— esto convierte al mock en una
+**segunda implementación de reglas de negocio del backend**, que es justo lo
+que ADR-018 evita en el código de producción. La diferencia es que MSW ya es
+una implementación completa del contrato por definición (ADR-001): la elección
+real no es "una o dos implementaciones" sino "la segunda es fiel o mentirosa".
+El drift entre ambas se mitiga con la misma herramienta que en el 3a, el
+checkpoint de contrato al cierre del sprint, que ahora incluye explícitamente
+la paridad de estos invariantes.
