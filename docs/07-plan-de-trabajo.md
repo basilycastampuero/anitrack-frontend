@@ -180,6 +180,13 @@ POST/PATCH/DELETE; ACL vs. reglas de registro en un ORM (`ir.model.access` vs.
 **Objetivo demo:** vincular una versión desde el catálogo, subir progreso con
 optimistic update, ver el perfil público con stats.
 
+> 🟡 **Carril A en 7/8** (2026-09-21): 3.12, 3.7, 3.8, 3.9, 3.10, 3.13 y 3.11
+> completos — objetivo demo cumplible. Falta solo **3.3b** (OAuth Twitch
+> end-to-end, ⚪ recortable), que depende de B9. **El carril B (backend en
+> `ll-odoo`, B6–B10) todavía no arrancó.** El sprint no está cerrado — detalle
+> completo, decisiones tomadas sobre la marcha y hallazgos en
+> [16-sprint3b-avance.md](./16-sprint3b-avance.md).
+
 | # | Tarea | Detalle | CA | Prioridad |
 |---|---|---|---|---|
 | 3.12 | ⚠️ El mock de `/me/links` ejecuta el modelo | Los tres handlers mantienen los invariantes del modelo en vez de ser un stub: agrupación por franquicia, propagación a copias sincronizadas, borrado del padre huérfano, y `linkCount`/`stats` **derivados** del seed en vez de escritos a mano (ADR-022) | Un test por invariante que **fuerce al mock a trabajar**: crear en una sub-carpeta anidada sube su `linkCount`; dos links de la misma franquicia agrupados dan **un** padre con dos hijos; patchear un link sincronizado mueve el otro; borrar el último hijo borra el padre; una lista privada anidada por la ruta pública da `404` | 🔴 núcleo |

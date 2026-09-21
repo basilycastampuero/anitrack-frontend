@@ -1,0 +1,262 @@
+# 16 — Bitácora: Avance Sprint 3b (tracking y vinculación)
+
+> Registra el estado real del Sprint 3b (doc 07, diseñado en
+> [15-diseno-sprint3b.md](./15-diseno-sprint3b.md)) a la fecha. No es un cierre
+> de sprint: el carril A queda en 7/8 (falta 3.3b) y el carril B todavía no
+> arrancó. Fecha: 2026-09-21.
+
+## Alcance completado
+
+### Carril A — frontend (contra MSW)
+
+| # | Tarea | Estado |
+|---|---|---|
+| 3.12 | El mock de `/me/links` ejecuta el modelo | ✅ (commit `b66925b`) |
+| 3.7 | `EpisodeStepper` con optimistic update | ✅ (commit `a0ae9b3`) |
+| 3.8 | `LinkWizard` con los tres caminos del 409 | ✅ (commit `5a3e5a9`) |
+| 3.9 | `library-index` en catálogo (indicador por versión) | ✅ (commit `59ec2ce`) |
+| 3.10 | Perfil público + stats | ✅ (commit `e971eaf`) |
+| 3.13 | Cierre de la deuda #6 | ✅ (commit `dc138a0`) |
+| 3.11 | RatingStars [flag] + notas | ✅ (commit `4cd9391`) |
+| 3.3b | OAuth Twitch end-to-end | ⬜ pendiente — ⚪ recortable, depende de B9 (carril B) y de registrar una app de Twitch propia |
+
+> Carril A cierra **7/8**. Fuera de la tabla del plan hay un noveno commit,
+> `1059c51` (fix de CI: apagar la latencia simulada de MSW bajo Vitest — ver
+> "Hallazgos" abajo), que no corresponde a ninguna tarea numerada.
+
+### Carril B — backend en `ll-odoo` (rama `anitrack/rest-catalog-api`, nunca se pushea)
+
+| # | Tarea | Estado |
+|---|---|---|
+| B6 | `POST /me/links` + `ir.rule` de copias (ADR-020, OR→AND) | ⬜ pendiente |
+| B7 | `PATCH`/`DELETE /me/links/:id` | ⬜ pendiente |
+| B8 | `/users/:id/profile` + `/users/:id/checklists/:id/entries` | ⬜ pendiente |
+| B9 | `GET /auth/oauth/twitch` (solo si va 3.3b) | ⬜ pendiente |
+| B10 | Checkpoint de contrato | ⬜ pendiente |
+
+> Carril B en **0/5**: no arrancó todavía. Es el camino que sigue.
+
+## Qué se construyó
+
+- **3.12 — el mock de `/me/links` deja de ser un stub** (`src/mocks/handlers.ts`,
+  `src/mocks/derive/lists.ts` NUEVO, `src/mocks/seed/lists.ts`): el `POST`
+  agrupa por franquicia, resuelve nombre/imagen/episodios desde el seed de
+  catálogo (nunca del body), valida que `displayNameId` pertenezca al content,
+  y busca el `409` en todas las carpetas del usuario, incluidas las anidadas.
+  El `PATCH` devuelve el `ListEntry` completo, recalcula el agregado del padre
+  y propaga a las copias sincronizadas. El `DELETE` borra el franchise-link
+  huérfano. Aplica ADR-022: `linkCount`, stats del perfil y `libraryIndex`
+  pasan a derivarse de los entries reales en vez de estar escritos a mano.
+  Arregla además la ruta pública de entries, que solo buscaba la checklist en
+  el nivel raíz.
+- **3.7 — `EpisodeStepper` optimistic** (`src/features/lists/utils/entryTree.ts`
+  NUEVO, `useUpdateEntryProgress.ts` NUEVO, `EpisodeStepper.tsx` NUEVO): aplica
+  ADR-021 (delta sobre el agregado del padre, sin recalcular
+  `compute_show_name`); `scope: { id: 'entry-<linkId>' }` serializa la ráfaga
+  del long-press, con commit debounced 400 ms y snapshot tomado en el primer
+  click. El fan-out de invalidación queda declarado en el docstring: invalida
+  `entries(checklistId)` y, si el link es sincronizado, `listKeys.all`; nunca
+  `tree()` ni `libraryIndex()`.
+- **3.8 — `LinkWizard`** (`useLinkWizard.ts`, `LinkWizard.tsx`,
+  `WizardVersionStep.tsx`, `WizardTargetStep.tsx`, `WizardConflictStep.tsx`,
+  `AddToListButton.tsx`, todos NUEVO): máquina de estados como unión
+  discriminada con los tres caminos del `409` (agregar igual, copia
+  sincronizada, cancelar). `AlreadyLinkedError` se parsea con Zod en el
+  service (§3.3 del diseño), nunca con `as` en el componente.
+  `VersionsTable` gana `renderAction` para que `catalog` no importe `lists`
+  (§3.4). `ChecklistTree` suma el modo `compact` en vez de duplicarse.
+- **fix de CI (`1059c51`)** — la latencia simulada de MSW (ADR-008) hacía
+  fallar la suite ~2 de cada 10 corridas con `ReferenceError: ProgressEvent is
+  not defined` cuando una request quedaba en vuelo al desmontarse el entorno
+  jsdom del archivo. La latencia pasa a cero bajo Vitest
+  (`import.meta.env.MODE`); el único test que necesitaba una ventana
+  optimista observable (`useUpdateChecklist`) pasa a poner su propio delay con
+  `server.use`. La suite baja de ~95 s a ~51 s.
+- **3.9 — indicador "in your list" por versión** (`useInLibrary.ts` NUEVO):
+  envuelve `useLibraryIndex` con dos `Set` memoizados (`hasVersion`,
+  `hasFranchise`); absorbe el `useMemo` que estaba triplicado en
+  Home/Catalog/Search. El botón dice "In your list ✓" pero sigue abriendo el
+  wizard (vincular a una segunda lista sigue siendo válido).
+- **3.10 — perfil público + stats** (`src/features/profile/` completo:
+  services, hooks, components, NUEVO): `StatsGrid` no calcula nada, muestra lo
+  que ya llega agregado del contrato (§4.5 del diseño); la dona
+  games/videos es SVG a mano. `PublicListPage` reusa `ListEntryRow` /
+  `FranchiseEntryGroup` sin pasarles `checklistId` (sin stepper, de solo
+  lectura). Cierra la nota pendiente del docstring de `useLogout` (§3.5 del
+  diseño): las queries de perfil no se limpian en logout porque un perfil
+  público no es dato de sesión.
+- **3.13 — cierre de la deuda #6** (`src/features/lists/types/index.ts`,
+  `useUpdateChecklist.ts`, `checklistTree.ts`, `src/mocks/handlers.ts`):
+  `CosmeticChecklistPatch` (`Pick<UpdateChecklistRequest, 'name' |
+  'description' | 'isPublished' | 'sortingMode'>`) convierte el falso verde
+  en error de compilación — verificado ensanchando el tipo a propósito y
+  contando tres `TS2578`. El mock aprende a mover/reordenar de verdad, con
+  detección de ciclos.
+- **3.11 — notas siempre, puntaje y fechas detrás del flag**
+  (`RatingStars.tsx` NUEVO, `ScoreDisplay.tsx` NUEVO,
+  `EntryNotesDialog.tsx` NUEVO, `useUpdateEntryMeta.ts` NUEVO): `notes` mapea a
+  `link_description`, que existe y es escribible en el backend real, así que
+  queda **fuera** del flag (§4.6 del diseño); solo `rating`/`startedAt`/
+  `finishedAt` (los `[EXT]` reales de ADR-004) van detrás de
+  `isFeatureEnabled`. El filtrado vive en el hook, no en el componente, para
+  que un `PATCH` no mande campos que el backend real no tiene.
+
+## Decisiones tomadas sobre la marcha (no estaban en los ADRs ni en el diseño)
+
+Ninguna cruza la vara de ADR nuevo — ADR-020 a ADR-022 ya estaban escritos en
+el diseño (doc 15) antes de que arrancara este trabajo, y nada de lo de abajo
+es un trade-off arquitectónico nuevo:
+
+1. **`RatingStars` es un radiogroup de diez radios visualmente ocultos**, uno
+   por media estrella, y no un puñado de `div` con `onClick`: así el teclado
+   funciona sin código adicional y el lector de pantalla anuncia "7 de 10" en
+   vez de leer diez iconos sueltos. Las estrellas visibles quedan
+   `aria-hidden`.
+2. **La latencia simulada de MSW se apaga solo bajo Vitest**, nunca en
+   navegador (decisión del fix de CI): la latencia sigue existiendo para ver
+   los skeletons en desarrollo (ADR-008 no se toca), pero deja de ser una
+   fuente de flake en la suite automatizada.
+3. **Los tests del wizard usan el `409` real que emite MSW**, no un
+   `server.use` que devuelva `existing: []`: fuerza a que el payload real
+   (con `checklistId`/`checklistName`) sea lo que se verifica, no una forma
+   inventada por el test. El caso de "copia sincronizada" elige a propósito
+   la **segunda** aparición del link existente, para confirmar que se manda
+   el elegido por el usuario y no el primero de la lista.
+4. **El seed ganó su primer par sincronizado real** (Steins;Gate en
+   "Completed" y en "2010s"): sin él, la propagación entre copias de 3.12/3.7
+   no se podía ejercer con datos reales del seed.
+
+## Hallazgos verificados durante la implementación
+
+Cuatro hallazgos concretos, con número o cita exacta, más allá de lo que el
+diseño (doc 15 §2.1) ya anticipaba en términos generales:
+
+- **Flake de CI por la latencia simulada de MSW — no estaba anticipado en el
+  diseño.** La suite fallaba ~2 de cada 10 corridas con
+  `ReferenceError: ProgressEvent is not defined`, siempre atribuido a un
+  archivo distinto del que lo causaba (una request en vuelo cuando Vitest ya
+  desmontó el entorno jsdom de ese archivo). Confirmado con diez corridas
+  limpias tras el fix (commit `1059c51`); la suite además bajó de ~95 s a
+  ~51 s de tiempo de tests.
+- **Las stats del seed eran directamente falsas, no solo "a mano".** El
+  diseño ya señalaba que `stats` era una constante sin relación con
+  `entriesByChecklist` (§2.1, §4.4); lo que se confirmó al derivarlas de
+  verdad (ADR-022) es que los valores viejos no correspondían a ningún
+  cálculo real: decían 128 episodios y 5 entries donde el número correcto,
+  contando solo listas publicadas, es 41 y 4.
+- **`libraryIndex` era peor que impreciso: crecía y nunca se achicaba.** El
+  `POST /me/links` lo agrandaba pero el `DELETE` nunca sacaba nada, así que
+  desvincular una versión la dejaba mostrándose igual como "in your list" —
+  el bug concreto que hacía inverificable la mitad "se actualiza al
+  agregar/quitar" de la CA de 3.9.
+- **El agujero de la lista privada anidada, confirmado y cerrado.** El diseño
+  ya lo señalaba como hueco conocido del mock (§2.1: `owner.find(...)` solo
+  mira el nivel raíz); en 3.12 se confirmó que efectivamente devolvía las
+  entries de una lista privada anidada a cualquiera, y se cerró buscando la
+  checklist de forma recursiva con `404` (no `403`) para las no publicadas —
+  mismo criterio que ya regía el resto de la API privada.
+
+## Revisión pre-merge (`anitrack-production-code-reviewer`)
+
+Con el carril A cerrado se corrió la revisión que el doc 15 §10 pone en este
+punto, sobre `0273f26..HEAD` acotado a `src/`. Veredicto: **0 críticos, 1
+alto, 5 medios, 6 bajos**; los siete invariantes de §10 se cumplen, sin
+hallazgos de seguridad ni violaciones de ADR-001 a ADR-022.
+
+Seis se arreglaron antes de seguir:
+
+| # | Hallazgo | Qué se hizo |
+|---|---|---|
+| 1 | Con dos commits en vuelo para el mismo entry, el snapshot de rollback se desalineaba: podía retroceder de más, o una mutación quedarse sin snapshot y dejar en pantalla un valor que el servidor nunca aceptó | `useUpdateEntryProgress` pasa a garantizar **un solo commit en vuelo**: si el debounce vence con uno andando, el valor queda pendiente y lo manda `onSettled`. El snapshot ya no se consume en `onMutate`, se limpia cuando la cadena queda ociosa, y un error aborta la cadena entera |
+| 2 | El `onError` del "deshacer" del toast nunca corría: el wizard ya está desmontado y TanStack v5 gatea los callbacks pasados a `mutate` por `hasListeners()` del observer | El aviso se movió a las opciones de `useDeleteLink`, que las invoca la mutación misma |
+| 3 | El flush de desmontaje no avisaba si fallaba, y su invalidación no refetcheaba la carpeta ya inactiva (default `refetchType: 'active'`) | Toast en el `catch` y `refetchType: 'all'` |
+| 4 | `shiftGroup` matcheaba el grupo del padre **por abreviación**, y la agregación emite un grupo por hijo: dos versiones del mismo content en la misma carpeta comparten `content_abbreviation`, así que el agregado se movía el doble | Se identifica el grupo por posición. Test de regresión con dos hijos homónimos |
+| 5 | Un visitante anónimo que tocaba "Add to list" en el catálogo público quedaba con un skeleton infinito: `useChecklists` está deshabilitado sin sesión y `ChecklistTree` evalúa `isPending` primero | `AddToListButton` ofrece entrar y volver (`/login?next=`) en vez de abrir un wizard que no puede funcionar |
+| 6 | `RatingStars`: los radios son `sr-only` y no había foco visible, así que un usuario de teclado vidente no veía dónde estaba parado | Anillo de foco sobre la estrella vía `has-[:focus-visible]:`, y `name` derivado de `useId()` |
+
+Una corrección al informe, verificada: el hallazgo #1 no se alcanza contra
+MSW. El reviewer lo atribuyó a la latencia normal del mock (200–600 ms), pero
+ese rango es el de los `GET` vía `simulate()`; el `PATCH /me/links/:id` usa
+150 ms, por debajo del debounce de 400. Se reproduce contra un backend real
+con RTT mayor a 400 ms, y el test de regresión inyecta esa lentitud a mano.
+
+### Deuda abierta que dejó la revisión
+
+Numerada acá para que no se pierda; nada de esto bloquea el merge.
+
+1. **El botón "Back" del paso `target` del wizard cancela el wizard entero**:
+   la máquina de estados no tiene transición `target → version`. Hoy es
+   inofensivo porque ningún caller omite `versionId`, así que ni ese botón ni
+   `WizardVersionStep` se renderizan en la app real — solo en los tests.
+   Decidir si `WizardVersionStep` tiene un punto de entrada propio o se
+   declara preparación para 4.x.
+2. **`PublicListPage` presenta cualquier error como "lista privada"**: un
+   corte de red o un `500` se leen como decisión de privacidad del dueño, y no
+   hay botón de reintento. Ramificar por `NOT_FOUND` como ya hace
+   `ProfilePage`.
+3. **`EntryNotesDialog` repone el formulario ante cualquier cambio de
+   identidad del entry** (`useEffect` con `[open, entry]`): si el entry cambia
+   en el cache mientras el diálogo está abierto, pisa lo que el usuario está
+   tipeando. Depender de `[open, entry.linkId]`.
+4. **El mock marca `isSynced` en el link origen antes de poder fallar**
+   (`handlers.ts`): un `422` posterior o un "deshacer" dejan el original
+   marcado como sincronizado sin ninguna copia. En Odoo la fila de
+   `ll.checklist.link.copy` se borraría con el link.
+5. **`useInLibrary` no entrega el ahorro que documenta cuando se usa por
+   fila**: cada `AddToListButton` construye sus propios `Set`. Con los tamaños
+   actuales es irrelevante, pero el comentario afirma algo que el uso
+   contradice. O se levanta el hook a la página, o se ajusta el comentario.
+6. **Tests faltantes**: `patchEntryFields` no tiene test propio, y el fan-out
+   de `useDeleteLink` solo se ejercita indirecto desde
+   `AddToListButton.test.tsx`.
+7. **Fuera del diff del sprint**: `GET /me/checklists/:id/entries` en el mock
+   devuelve los entries sin verificar que la carpeta sea del usuario logueado
+   — `requireUser()` solo comprueba que haya sesión. Es la misma clase de fuga
+   que 3.12 cerró en la ruta pública y, ahora que existe `findChecklist`, son
+   dos líneas.
+
+## Verificación
+
+Corrido en esta sesión desde `anitrack-frontend/` (rama `sprint-3b-tracking`):
+
+```bash
+npm run typecheck   # limpio
+npm run lint        # 0 errores
+npx vitest run      # 46 archivos, 249 tests, todos en verde
+```
+
+**Verificación visual**, según lo registrado en cada commit (Chromium propio
+de Playwright vía CDP, no re-verificado en esta sesión de documentación):
+dark mode y 1280px/390px para 3.7 (tope superior deshabilitado en versión
+terminada), 3.8 (paso de destino, conflicto con nombre real de la lista, tres
+botones de salida) y 3.10 (stats, listas publicadas, vista pública sin
+stepper); 3.11 además corrigió un problema de mobile encontrado en esa misma
+verificación (las dos fechas no entraban en dos columnas bajo `sm`, ahora se
+apilan).
+
+**No verificado**: nada del carril B contra el Odoo local (no arrancó); los
+escenarios de accesibilidad con lector de pantalla real siguen sin probarse
+(arrastrado desde el Sprint 3a).
+
+## Qué falta (siguiente paso)
+
+- **Carril A**: solo **3.3b** (OAuth Twitch end-to-end), ⚪ recortable y
+  depende de B9. No bloquea el cierre del sprint si se recorta (regla de
+  corte del diseño, doc 15 §7).
+- **Carril B completo, 0/5**: B6 (`POST /me/links` + `ir.rule` de copias,
+  ADR-020), B7 (`PATCH`/`DELETE /me/links/:id`), B8 (perfil público en el
+  backend real), B9 (OAuth Twitch, solo si va 3.3b), B10 (checkpoint de
+  contrato, corrido por el agente de tests, no por quien escriba B6–B8).
+- Antes de B10: seguir pendiente **exportar `libraryIndexSchema` y
+  `checklistResponseSchema`** (`src/features/lists/services/lists.service.ts`)
+  — deuda de B5 (Sprint 3a), verificado en esta sesión que sigue sin
+  exportarse.
+- Deuda heredada del Sprint 3a sin cambios en esta sesión: **#9 a #14**, el
+  punto de entrada de logout en la UI (verificado en esta sesión: sigue sin
+  ningún componente usando `useLogout`), el alcance de la `ir.rule` de
+  ADR-014 a `base.group_portal`, y la falta de verificación con lectores de
+  pantalla reales.
+- Seguir la conversación con Chano en
+  [`../docs-backend/08-preguntas-backend.md`](../docs-backend/08-preguntas-backend.md):
+  el `invitation_scope` de producción y si acepta el trabajo de `ll-odoo`
+  como PR — sin cambios.
