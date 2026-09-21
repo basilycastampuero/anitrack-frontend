@@ -58,7 +58,10 @@ function fakeTree(): ChecklistNode[] {
   ]
 }
 
-function findNode(tree: ChecklistNode[] | undefined, id: number): ChecklistNode | undefined {
+function findNode(
+  tree: ChecklistNode[] | undefined,
+  id: number,
+): ChecklistNode | undefined {
   if (!tree) return undefined
   for (const node of tree) {
     if (node.id === id) return node
@@ -70,6 +73,18 @@ function findNode(tree: ChecklistNode[] | undefined, id: number): ChecklistNode 
 
 describe('useUpdateChecklist', () => {
   it('renombra un nodo anidado de forma optimista antes de que resuelva el request', async () => {
+    // Este test necesita una ventana optimista observable, así que se pone su
+    // PROPIA latencia en vez de depender de la del mock general: esa es cero
+    // bajo Vitest a propósito (ver `handlers.ts`), porque una request en vuelo
+    // al terminar el archivo aterriza con jsdom ya desmontado. El handler
+    // devuelve `undefined`, que en MSW significa "seguí al siguiente": solo
+    // agrega la demora y deja que responda el handler real.
+    server.use(
+      http.patch('/api/v1/me/checklists/:id', async () => {
+        await delay(200)
+      }),
+    )
+
     const client = new QueryClient()
     client.setQueryData(listKeys.tree(), fakeTree())
 
@@ -79,8 +94,6 @@ describe('useUpdateChecklist', () => {
 
     result.current.mutate({ id: 4, patch: { name: 'Renamed live' } })
 
-    // El PATCH mock demora 200ms: alcanza para observar el estado optimista
-    // antes de que la mutación termine de resolver.
     await waitFor(() => {
       expect(findNode(client.getQueryData(listKeys.tree()), 4)?.name).toBe(
         'Renamed live',
@@ -90,7 +103,9 @@ describe('useUpdateChecklist', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     // El resto del árbol (nodo hermano no tocado) queda intacto.
-    expect(findNode(client.getQueryData(listKeys.tree()), 1)?.name).toBe('Watching')
+    expect(findNode(client.getQueryData(listKeys.tree()), 1)?.name).toBe(
+      'Watching',
+    )
   })
 
   it('ante un error inyectado revierte el snapshot completo del árbol', async () => {

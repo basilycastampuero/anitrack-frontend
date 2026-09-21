@@ -81,9 +81,23 @@ function injectedError(request: Request): Response | null {
   return null
 }
 
+/**
+ * La latencia simulada existe para ver los skeletons en el navegador
+ * (ADR-008: 200–600 ms). En tests no aporta nada y sí hace daño: un archivo
+ * puede terminar con una request todavía en vuelo, y cuando la respuesta
+ * aterriza jsdom ya desmontó el entorno — el interceptor XHR de MSW explota
+ * con `ReferenceError: ProgressEvent is not defined` y Vitest lo cuenta como
+ * unhandled error, que hace fallar la corrida entera de forma intermitente.
+ */
+const IS_TEST = import.meta.env.MODE === 'test'
+
 /** Latencia realista (ADR-008: 200–600ms) para ver skeletons. */
+function latency(ms: number): Promise<void> {
+  return delay(IS_TEST ? 0 : ms)
+}
+
 async function simulate(request: Request): Promise<Response | null> {
-  await delay(200 + Math.random() * 400)
+  await latency(200 + Math.random() * 400)
   return injectedError(request)
 }
 
@@ -238,7 +252,7 @@ export const handlers = [
 
   // ---- Auth ----
   http.post(url('/auth/login'), async ({ request }) => {
-    await delay(300)
+    await latency(300)
     const err = injectedError(request)
     if (err) return err
     const body = (await request.json()) as { login?: string; password?: string }
@@ -269,7 +283,7 @@ export const handlers = [
   }),
 
   http.post(url('/auth/register'), async ({ request }) => {
-    await delay(300)
+    await latency(300)
     const err = injectedError(request)
     if (err) return err
     const body = (await request.json()) as {
@@ -314,7 +328,7 @@ export const handlers = [
   }),
 
   http.post(url('/me/checklists'), async ({ request }) => {
-    await delay(300)
+    await latency(300)
     const err = injectedError(request)
     if (err) return err
     const uid = requireUser()
@@ -350,7 +364,7 @@ export const handlers = [
   }),
 
   http.patch(url('/me/checklists/:id'), async ({ request, params }) => {
-    await delay(200)
+    await latency(200)
     const err = injectedError(request)
     if (err) return err
     const uid = requireUser()
@@ -368,7 +382,7 @@ export const handlers = [
   }),
 
   http.delete(url('/me/checklists/:id'), async ({ request, params }) => {
-    await delay(200)
+    await latency(200)
     const err = injectedError(request)
     if (err) return err
     const uid = requireUser()
@@ -404,7 +418,7 @@ export const handlers = [
    * si ya existe, y detecta el duplicado antes de crear nada.
    */
   http.post(url('/me/links'), async ({ request }) => {
-    await delay(350)
+    await latency(350)
     const err = injectedError(request)
     if (err) return err
     const uid = requireUser()
@@ -543,7 +557,7 @@ export const handlers = [
    * mueve también sus copias, que viven en OTRAS carpetas del usuario.
    */
   http.patch(url('/me/links/:id'), async ({ request, params }) => {
-    await delay(150)
+    await latency(150)
     const err = injectedError(request)
     if (err) return err
     const uid = requireUser()
@@ -590,7 +604,7 @@ export const handlers = [
   }),
 
   http.delete(url('/me/links/:id'), async ({ request, params }) => {
-    await delay(150)
+    await latency(150)
     const err = injectedError(request)
     if (err) return err
     const uid = requireUser()
