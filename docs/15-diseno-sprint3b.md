@@ -51,6 +51,15 @@ Desktop no estaba corriendo), así que a diferencia del doc 12 **nada de acá es
 verificación empírica contra la base**: todo lo del backend sale de leer el
 código de `ll-odoo` en la rama `anitrack/rest-catalog-api`.
 
+> **Actualización 2026-09-21 — §2.2 ya no es toda inferencia.** El Odoo local
+> se levantó y los dos supuestos de backend que sostenían el diseño del carril
+> B se probaron: uno **confirmado** (la `ir.rule` de copias, DoS incluido) y
+> otro **confirmado parcialmente** (`Link.unlink()`: el `MissingError` existe,
+> pero solo si el recordset trae padre e hijos juntos). El detalle está en
+> §2.2, anotado bajo cada supuesto sin borrar el razonamiento original. Lo que
+> sigue sin probarse es el supuesto de OAuth (grupo Portal tras
+> `_auth_oauth_signin`), que es CA de 3.3b.
+
 ### 2.1 Verificado leyendo el código
 
 **Frontend — lo que ya existe y no hay que volver a escribir:**
@@ -133,9 +142,25 @@ código de `ll-odoo` en la rama `anitrack/rest-catalog-api`.
 - `lv_episodes` es un `fields.Integer` sin `@api.constrains` ni límites: el
   modelo acepta negativos y valores por encima de `version_episodes`.
 
-### 2.2 Inferido (no comprobado empíricamente)
+### 2.2 Inferido en el diseño — dos de tres ya verificados (2026-09-21)
 
-Marcado como tal para que quien ejecute no lo tome por verificado:
+Esta sección se escribió el 2026-09-10 como inferencia pura, para que quien
+ejecutara no la tomara por verificada. El 2026-09-21 se levantó el Odoo local
+y se probaron los dos supuestos de backend. **El razonamiento original queda
+tal cual**, con el resultado real anotado debajo de cada uno: lo valioso no es
+solo el veredicto, es ver qué se dedujo bien, qué se dedujo de más y qué le
+faltaba a la propia prueba.
+
+Cómo se probó cada uno:
+
+- **La `ir.rule` de copias:** dos usuarios portal reales con su
+  `ll.checklist.user`, una checklist y un link cada uno, y el mismo script
+  corrido **antes y después** de aplicar ADR-020, con `ll_webpage` actualizado
+  en medio para que la `ir.rule` recargara.
+- **`Link.unlink()`:** primero un borrado suelto (que no encontró nada), y
+  después —cuando el error apareció implementando B6— una sonda dedicada,
+  `unlink-probe.mjs`, con cuatro escenarios de borrado. Los cuatro están en la
+  tabla de abajo.
 
 - **La `ir.rule` de `link.copy` con `'|'` no cierra el agujero de escritura que
   B4 dice cerrar, y abre uno nuevo.** Razonamiento: con OR, una fila
@@ -150,10 +175,80 @@ Marcado como tal para que quien ejecute no lo tome por verificado:
   filas legítimas tienen siempre los dos lados del mismo usuario, así que el
   falso-negativo de `isSynced` que motivó B4 se arregla igual. → **ADR-020**,
   y su verificación empírica con dos usuarios portal es CA de B6.
+
+  > ✅ **CONFIRMADO (2026-09-21), incluido el DoS — y ya mitigado.** Con el
+  > OR, el portal A creó sin error una fila de `ll.checklist.link.copy` con
+  > `lc_left_id` propio y `lc_right_id` apuntando al link de B. Acto seguido B
+  > **no pudo** escribir `lv_episodes` en su propio link: `AccessError`. O sea
+  > que el vector de denegación de servicio cruzado no era una posibilidad
+  > teórica, ocurre tal cual lo describe el párrafo de arriba.
+  >
+  > Tras aplicar el AND (commit en `ll-odoo`, rama `anitrack/rest-catalog-api`,
+  > sin pushear): A recibe `AccessError` al intentar la fila cruzada, B vuelve
+  > a escribir su link, el admin conserva lectura y borrado sobre `link.copy`
+  > (la regresión de ADR-014 sin novedad), y —lo que había que comprobar para
+  > no cambiar un agujero por una feature rota— las **copias legítimas**
+  > (ambos lados del mismo dueño, que es lo que creará `syncWithLinkId` en B6)
+  > se crean y son visibles con el ORM del propio usuario.
+  >
+  > Consecuencia para B6: la regla se aplicó antes que el endpoint, y sus CA
+  > (b), (c) y (d) quedaron cubiertas a nivel ORM ahí mismo. **B6 está
+  > completa** desde el 2026-09-21, endpoint incluido, con 8 de 8 escenarios
+  > verificados contra el Odoo local (§6.3) — entre ellos el `404` por
+  > `syncWithLinkId` ajeno, que es la defensa en profundidad que pedía
+  > ADR-020.
 - Que `Link.unlink()` funcione tal como está escrito. Borrar
   `link_record_id` primero cascadea a la fila del link, y después
   `super().unlink()` corre sobre un registro que ya no existe. Puede ser
   inocuo o un `MissingError`; **no se probó**. Es CA de B7.
+
+  > ⚠️ **CONFIRMADO PARCIALMENTE (2026-09-21): el `MissingError` existe, pero
+  > no en el camino de un `DELETE` de un solo link.** La premisa era correcta
+  > (`link_record_id` es
+  > `Many2one(comodel_name="ll.checklist.checklist", ondelete="cascade")`,
+  > `ll_checklist/models/database/link.py:62-66`) **y la conclusión también**:
+  > `super().unlink()` sobre una fila que la cascada ya se llevó explota. Lo
+  > que el supuesto no decía es **cuándo** se pisa esa condición, y esa es la
+  > parte que importa para B7.
+  >
+  > Caracterizado con una sonda dedicada (`unlink-probe.mjs`) contra el Odoo
+  > local, cuatro casos, cada uno armando su propio franchise-link con hijos:
+  >
+  > | Caso | Qué borra | Resultado |
+  > |---|---|---|
+  > | A | Un version-link suelto | **Sin error** |
+  > | B | El franchise-link padre **y** sus hijos en la **misma** llamada | **`odoo.exceptions.MissingError`** |
+  > | C | El padre solo | **Sin error**, y se lleva a los hijos (sobrevivieron 0 de 1) |
+  > | D | Hijos primero y el padre después, en llamadas **separadas** | **Los dos sin error** |
+  >
+  > El mecanismo es el del razonamiento original: borrar el padre cascadea (su
+  > sombra se lleva las sombras hijas, y esas a sus links), así que cuando el
+  > loop del override llega a los hijos esas filas ya no existen. Solo se
+  > manifiesta si el recordset trae **padre e hijos juntos**.
+  >
+  > Consecuencias para B7, dos:
+  >
+  > 1. La salida que preveía §9 (borrar en orden inverso desde el controlador)
+  >    **no hace falta** — el caso D muestra que ni siquiera el orden alcanza a
+  >    ser el problema. La regla real es más simple: **una llamada a `unlink`
+  >    por link, y el padre después de los hijos**. Nunca un recordset con
+  >    ambos.
+  > 2. El caso C es una **simplificación**, no solo una advertencia: si el
+  >    usuario borra el franchise-link, los hijos se van solos y el endpoint no
+  >    tiene que recorrerlos. El caso D agrega el complemento: el padre
+  >    **sobrevive** al borrado de sus hijos, así que el franchise-link que
+  >    queda huérfano hay que borrarlo **explícitamente** (es justamente lo que
+  >    la CA de B7 pide comprobar).
+  >
+  > Vale la pena que quede escrito cómo evolucionó este supuesto, porque es la
+  > lección más útil de §2.2. Se dedujo leyendo el override y la definición del
+  > campo, que era todo lo que se podía hacer sin base. La **primera** prueba
+  > empírica borró un solo link (caso A), no vio el error, y el supuesto se
+  > anotó acá como refutado. Recién al implementar B6 apareció el fallo en otro
+  > escenario y hubo que caracterizarlo con los cuatro casos. O sea: una prueba
+  > empírica que no cubre el espacio de casos puede dar **más** confianza que
+  > la inferencia y ser igual de equivocada. La inferencia había acertado el
+  > mecanismo; lo que faltaba era la condición que lo dispara.
 - Que `_auth_oauth_signin` deje al usuario en el grupo Portal (lo que espera
   ADR-015). Es la CA de 3.3b y sigue sin verificarse.
 
@@ -459,8 +554,8 @@ mismo (hoy hace un `filter` de nivel raíz).
 
 | # | Tarea | Detalle | CA |
 |---|---|---|---|
-| B6 | `POST /me/links` + `ir.rule` de copias | La lógica de `action_create_link` como endpoint (§6.1); `security/portal_access.xml`: el `'|'` de `link.copy` pasa a AND (ADR-020) | Con **dos usuarios portal**: (a) A vincula una versión que B ya tiene → `409` **sin** ningún dato de B adentro; (b) A manda `syncWithLinkId` de un link de B → `404`, y no queda ninguna fila de `ll.checklist.link.copy` creada; (c) B sigue pudiendo escribir `lv_episodes` en su link después del intento de A (regresión del DoS de §2.2); (d) el admin conserva read/write/unlink sobre `link.copy` (misma regresión que ADR-014); (e) `groupUnderFranchise: true` dos veces sobre la misma franquicia crea **un** franchise-link, no dos |
-| B7 | `PATCH` + `DELETE /me/links/:id` | Body parcial con la misma técnica de `"clave" in body` de B4; `watchedEpisodes < 0` → `422`; los `[EXT]` (`rating`/`startedAt`/`finishedAt`) se ignoran en silencio (ADR-004: son opcionales y el frontend no los manda contra el backend real); `DELETE` espeja `action_remove` incluyendo el borrado del franchise-link que queda sin hijos | `PATCH` de `watchedEpisodes` sobre un link sincronizado mueve **todas** sus copias (verificar contando filas, no leyendo una); `DELETE` del último hijo deja `0` franchise-links huérfanos; `DELETE` devuelve `204` y **no** tira `MissingError` (el override `Link.unlink` no lo ejerció nunca nadie, §2.2) |
+| ~~B6~~ **HECHA (2026-09-21)** | `POST /me/links` + `ir.rule` de copias | La lógica de `action_create_link` como endpoint (§6.1) e `ir.rule` de `link.copy` de `'|'` a AND (ADR-020), con el DoS reproducido antes y ausente después. **Implementada y verificada de punta a punta contra el Odoo local** | **8 de 8 escenarios en verde**: `201` con datos resueltos del catálogo; `409` con `checklistName` real; `force`; reuso del franchise-link por `(carpeta, franquicia, contentType)`; `422` por `displayNameId` ajeno; copia sincronizada con `isSynced`; `404` con `syncWithLinkId` de otro usuario. Cubre las cinco CA originales —(a) el `409` sin datos de B, (b) el `404` del `syncWithLinkId` ajeno, (c) B conserva la escritura, (d) el admin conserva read/write/unlink, (e) `groupUnderFranchise` dos veces crea **un** franchise-link— más la que agregó la verificación de ADR-020: una copia legítima (ambos lados del mismo dueño) se crea y es visible con el ORM del usuario, o sea que el AND no rompió `syncWithLinkId` |
+| B7 | `PATCH` + `DELETE /me/links/:id` | Body parcial con la misma técnica de `"clave" in body` de B4; `watchedEpisodes < 0` → `422`; los `[EXT]` (`rating`/`startedAt`/`finishedAt`) se ignoran en silencio (ADR-004: son opcionales y el frontend no los manda contra el backend real); `DELETE` espeja `action_remove` incluyendo el borrado del franchise-link que queda sin hijos. **Regla de implementación (no opcional), de la sonda de §2.2: nunca meter el franchise-link padre y sus hijos en el mismo `unlink` — es el único caso que tira `MissingError`.** Una llamada por link, y el padre después de los hijos. Dos consecuencias que simplifican el endpoint: si el usuario borra el franchise-link, **los hijos se van solos** por la cascada (caso C, no hay que recorrerlos); y el padre **sobrevive** al borrado de sus hijos (caso D), así que el huérfano se borra explícitamente, en una llamada aparte | `PATCH` de `watchedEpisodes` sobre un link sincronizado mueve **todas** sus copias (verificar contando filas, no leyendo una); `DELETE` del último hijo deja `0` franchise-links huérfanos; `DELETE` devuelve `204` y **no** tira `MissingError` — sigue siendo CA, y ahora se sabe qué la garantiza: el borrado de a un link por llamada. El riesgo no desapareció, quedó acotado a los borrados en lote (§9) |
 | B8 | `/users/<id>/profile` + `/users/<id>/checklists/<cid>/entries` | `api_public.py` NUEVO, `sudo()` + filtro `checklist_published` (§6.2); stats por `read_group` solo sobre links en listas publicadas | Una lista privada **anidada** da `404` (no `403`, no sus entries); las stats de un usuario con listas privadas **no** cambian al agregar entries a una privada; perfil de un usuario sin listas publicadas devuelve `200` con `stats` en cero y `publishedChecklists: []` |
 | B9 | `GET /auth/oauth/twitch?redirect=` + proveedor | Solo si va 3.3b. Ruta en `api_auth.py` que arma el `auth_link` del proveedor (reutilizando `ll_oauth_extra_params`) y lleva el `redirect` de la SPA en el `state`; el `auth.oauth.provider` de Twitch es **config de la base**, no código | Login por Twitch de punta a punta contra el Odoo local; el usuario creado por `_auth_oauth_signin` cae en el grupo **Portal** (o queda documentado en qué grupo cae y qué implica para ADR-014); cancelar en Twitch vuelve a `/auth/callback?error=access_denied` |
 | B10 | Checkpoint de contrato | Mismo método que B5: los esquemas Zod **del frontend** contra las respuestas reales, corrido por el **agente de tests**, no por quien escribió B6–B8. Prerrequisito: exportar `libraryIndexSchema` y `checklistResponseSchema` (deuda abierta de B5) más los esquemas nuevos del sprint | Todos los esquemas en verde, o el drift documentado con su decisión. Incluye explícitamente la paridad MSW ↔ real de los cuatro invariantes de §4.4 (`linkCount`, agrupado, propagación a copias, padre huérfano) |
@@ -751,25 +846,31 @@ Carril B (en paralelo, no bloquea el A):  B6 → B7 → B8 → [B9] → B10
 | Riesgo | Mitigación concreta |
 |---|---|
 | **El `409 ALREADY_LINKED` filtra listas de otros usuarios.** La lógica de Chano (`action_link_to_checklist`) busca links sin filtrar por dueño; bajo `sudo()` devolvería nombres de listas ajenas — y ahora el payload del `409` **lleva el nombre de la lista** (§5.2), así que la fuga sería literal, no potencial | ADR-014: `/me/*` corre con el ORM del usuario y la `ir.rule` acota la búsqueda sola. CA de B6 (a): dos usuarios portal, A vincula lo que B ya tiene y el `409` no trae ni un dato de B. Es el mismo riesgo que el doc 12 dejó anotado y sigue siendo el más caro del sprint |
-| **La `ir.rule` de `link.copy` con `'|'` (OR) permite crear una fila cruzada y, peor, la hace visible desde el otro lado**: la víctima queda con su propio `PATCH` de episodios rompiendo con `AccessError` (§2.2, inferido, no probado) | ADR-020: la regla pasa al AND implícito (ambos lados del mismo dueño), y B6 valida `syncWithLinkId` con el ORM del usuario antes de crear nada (defensa en profundidad). CA de B6 (b) y (c), **con dos usuarios portal**. Es lo primero que hay que probar empíricamente cuando el Odoo local vuelva a estar arriba |
+| ~~**La `ir.rule` de `link.copy` con `'|'` (OR) permite crear una fila cruzada y, peor, la hace visible desde el otro lado**: la víctima queda con su propio `PATCH` de episodios rompiendo con `AccessError`~~ → **CONFIRMADO y MITIGADO (2026-09-21)** | Era real, DoS incluido: con el OR, A creó la fila cruzada y B dejó de poder escribir `lv_episodes` en su propio link (§2.2). ADR-020 aplicado en `ll-odoo` (`ll_webpage/security/portal_access.xml`, rama `anitrack/rest-catalog-api`, sin pushear) y re-verificado con dos usuarios portal: la fila cruzada ya no se crea, B recupera la escritura, el admin conserva read/unlink y las copias legítimas siguen creándose y viéndose. La defensa en profundidad también está: B6 valida `syncWithLinkId` con el ORM del usuario y devuelve `404` si es ajeno, verificado entre sus 8 escenarios (§6.3). Riesgo cerrado |
 | **Un `PATCH` de progreso deja mintiendo el cache de otras carpetas** (copias sincronizadas, verificado en `Link.write`) | §3.2: si `isSynced`, `onSettled` invalida el prefijo `['lists']` entero. Test explícito leyendo el `queryClient`, no la pantalla |
 | **El agregado del padre no se mueve durante la ventana optimista** y la demo muestra la barra del hijo subiendo con el `[S1 …]` congelado | ADR-021: delta sobre el grupo del padre. Se testea la función pura `patchEntryProgress`, no el componente |
 | **Una ráfaga de long-press produce respuestas fuera de orden y un rollback ambiguo** | §4.3: `scope` de TanStack Query v5 (serializa por entry) + valor absoluto en el body + commit debounced. Si hay que recortar, se recorta el long-press, no el `scope` |
 | **El mock de `/me/links` hace pasar en verde cuatro tareas que no funcionan** (es la octava mentira de MSW del proyecto) | 3.12 es prerrequisito bloqueante y su CA exige tests que **fuercen al mock a trabajar** (crear anidado, agrupar, propagar, borrar el padre huérfano), no tests de "se llamó la mutación". Es la lección literal del Sprint 3a |
 | **MSW y el backend real divergen en silencio** (ADR-017: dos implementaciones del mismo contrato, y ahora el mock tiene reglas de negocio) | B10 obligatorio para cerrar el sprint, corrido por el agente de tests y no por quien escribió los endpoints (como en B5, que así encontró un drift real). Incluye la paridad de los cuatro invariantes de §4.4 |
-| **`Link.unlink()` nunca se ejerció**: el override borra `link_record_id`, que cascadea hacia el propio link, y después llama a `super().unlink()` sobre una fila que ya no existe | CA de B7: el `DELETE` devuelve `204` sin `MissingError`. Si explota, la salida es borrar en el orden inverso desde el controlador, no parchear `ll_checklist` |
+| **`Link.unlink()` nunca se ejerció**: el override borra `link_record_id`, que cascadea hacia el propio link, y después llama a `super().unlink()` sobre una fila que ya no existe → **RIESGO REAL, ACOTADO A LOS BORRADOS EN LOTE (2026-09-21)** | Caracterizado con `unlink-probe.mjs`, cuatro casos (§2.2): el `MissingError` **se reproduce** cuando el recordset trae el franchise-link padre **y** sus hijos en la misma llamada, y **no** aparece borrando un link suelto, ni el padre solo, ni hijos-y-después-padre en llamadas separadas. La mitigación **no** es la que preveía este diseño (borrar en orden inverso desde el controlador) sino más barata: **una llamada a `unlink` por link, y el padre después de los hijos**. Un `DELETE /me/links/:id` de a uno nunca pisa la condición. Sigue sin tocarse `ll_checklist` |
 | **3.10 expone datos privados por un `403` que confirma existencia, o por un filtro de publicación que solo mira la raíz** (el mock ya tiene exactamente ese bug) | §5.4 (`404` en vez de `403`) + §6.2 (bosque de subárboles publicados) + CA de 3.12 y de B8, ambas con una lista privada **anidada** |
 | **Las stats filtran el tamaño de las listas privadas** de un usuario en un endpoint público | §4.5: se calculan solo sobre links en checklists publicadas. CA de B8: agregar entries a una lista privada no mueve las stats |
 | **3.3b se traba en la app de Twitch** (depende de registrar una app y de config de base, no de código) | Es ⚪ y va última; regla de corte explícita en su ficha: 3.3a es el entregable de portafolio y 3.3b se mueve a Sprint 4. Además `ll_oauth` tiene un `except AccessDenied` sin importar `AccessDenied` (§2.1): si esa rama corre es un `NameError`, así que conviene mirarlo antes de perder una tarde |
-| **El Odoo local no se pudo levantar en esta sesión**, así que todo el diseño del carril B sale de leer código, no de probarlo (a diferencia del doc 12) | Está marcado en §2.2 qué es inferido. B6 arranca levantando el Odoo local y **reverificando** los dos supuestos que sostienen su diseño (la `ir.rule` de copias y `Link.unlink`) antes de escribir el endpoint |
+| **El Odoo local no se pudo levantar en la sesión de diseño**, así que todo el carril B salió de leer código, no de probarlo (a diferencia del doc 12) → **mitigación ejecutada (2026-09-21)** | Estaba marcado en §2.2 qué era inferido, y la reverificación previa a escribir endpoints **ya se hizo**: uno confirmado, uno confirmado a medias (ver §2.2). Que ninguno de los dos saliera limpio es la justificación de haber separado §2.1 de §2.2. Lección extra, que vale para el resto del sprint: la primera prueba de `Link.unlink()` borró un solo link, no vio nada y casi cierra el tema en falso — el fallo apareció implementando B6. **Una prueba que no cubre el espacio de casos da más confianza que la inferencia y puede errar igual**; cuando un supuesto se verifique, conviene decir explícitamente qué escenarios se probaron. Sigue sin probarse el supuesto de OAuth (grupo Portal tras `_auth_oauth_signin`), que es CA de 3.3b/B9, ambas ⚪ |
 | **El plazo**: el 3b suma dos tareas al plan (3.12 y 3.13) sobre un sprint que ya tenía seis | 3.13 es 🟡 y su mitad cara es recortable; 3.12 no agrega alcance, paga una deuda que ya estaba consumiendo tiempo de otras tareas (el mismo patrón del #7 en el 3a, que se cobró tres tareas seguidas antes de cerrarse) |
 
 ## 10. Qué le toca a cada agente
 
-- **`anitrack-software-architect`** (este documento) — pendiente suyo: nada
-  bloqueante, salvo revisar ADR-020 cuando B6 lo verifique empíricamente. Si
-  la prueba con dos usuarios portal contradice el razonamiento de §2.2, el ADR
-  se corrige ahí mismo en vez de dejarlo afirmando algo falso.
+- **`anitrack-software-architect`** (este documento) — ~~pendiente suyo: nada
+  bloqueante, salvo revisar ADR-020 cuando B6 lo verifique empíricamente~~
+  **hecho (2026-09-21)**: la prueba con dos usuarios portal se corrió, ADR-020
+  quedó confirmado (y aplicado), el supuesto de `Link.unlink()` quedó
+  confirmado a medias —el `MissingError` existe pero solo con padre e hijos en
+  el mismo recordset—, y §2.2, §6.3, §9 y el propio ADR-020 se corrigieron con
+  el resultado real en vez de dejarse afirmando algo falso. Se corrigieron
+  **dos veces**: la primera vuelta dio `Link.unlink()` por refutado sobre una
+  prueba de un solo borrado, y hubo que rehacerla cuando B6 destapó el caso en
+  lote. Pendiente suyo ahora: nada bloqueante.
 - **`anitrack-senior-software-engineer`** — ejecuta el carril A en el orden de
   §8 (3.12 **primero**) y el carril B con el detalle de §6. No re-decide lo que
   fijan ADR-020 a ADR-022; si algo no cierra al implementarlo, lo levanta en

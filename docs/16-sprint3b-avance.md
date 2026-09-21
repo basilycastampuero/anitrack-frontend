@@ -28,13 +28,18 @@
 
 | # | Tarea | Estado |
 |---|---|---|
-| B6 | `POST /me/links` + `ir.rule` de copias (ADR-020, OR→AND) | ⬜ pendiente |
+| B6 | `POST /me/links` + `ir.rule` de copias (ADR-020, OR→AND) | ✅ hecha (2026-09-21) |
 | B7 | `PATCH`/`DELETE /me/links/:id` | ⬜ pendiente |
 | B8 | `/users/:id/profile` + `/users/:id/checklists/:id/entries` | ⬜ pendiente |
 | B9 | `GET /auth/oauth/twitch` (solo si va 3.3b) | ⬜ pendiente |
 | B10 | Checkpoint de contrato | ⬜ pendiente |
 
-> Carril B en **0/5**: no arrancó todavía. Es el camino que sigue.
+> Carril B en **1/5**. Arrancó el 2026-09-21, cuando pudo levantarse el Odoo
+> local (faltaba activar la integración WSL de Docker Desktop para la distro).
+> Antes de escribir una línea se reverificaron empíricamente los dos supuestos
+> que el diseño había marcado como inferidos — ver "Verificación empírica del
+> carril B" más abajo. B6 quedó probada de punta a punta contra el backend
+> real; sigue B7.
 
 ## Qué se construyó
 
@@ -214,6 +219,72 @@ Numerada acá para que no se pierda; nada de esto bloquea el merge.
    — `requireUser()` solo comprueba que haya sesión. Es la misma clase de fuga
    que 3.12 cerró en la ruta pública y, ahora que existe `findChecklist`, son
    dos líneas.
+
+## Verificación empírica del carril B (2026-09-21)
+
+El doc 15 §2.2 marcaba dos supuestos como "inferidos, no comprobados": el
+Odoo local no había podido levantarse durante el diseño. Se levantó, y se
+probaron los dos con **dos usuarios portal reales**, corriendo el mismo script
+antes y después de cada cambio.
+
+**ADR-020, la `ir.rule` de `link.copy` con OR — confirmado, y el DoS también.**
+Con el OR, el portal A creó una fila de `ll.checklist.link.copy` apuntando al
+link de B, y a partir de ahí B **no pudo escribir `lv_episodes` en su propio
+link** (`AccessError`): `Link.write` intenta propagar al link del atacante y
+se lo niega. Un usuario cualquiera podía inutilizarle el progreso a otro.
+Aplicado el AND (commit `d3be430` en `ll-odoo`), el mismo script da: A recibe
+`AccessError`, B recupera la escritura, el admin conserva lectura y borrado
+(regresión de ADR-014), y —la comprobación que evitaba el falso positivo— las
+**copias legítimas** siguen creándose y viéndose.
+
+**`Link.unlink()` y el `MissingError` — confirmado parcialmente, y el matiz
+importa.** La primera prueba borró un link suelto y no falló, así que se
+registró como refutado. Al implementar B6 el error apareció, y una sonda de
+cuatro casos lo acotó:
+
+| Caso | Resultado |
+|---|---|
+| `unlink` de un version-link suelto | sin error |
+| `unlink` del franchise-link padre **y sus hijos en la misma llamada** | **`MissingError`** |
+| `unlink` del padre solo | sin error, y se lleva a los hijos por cascada |
+| hijos primero y el padre después, en llamadas separadas | las dos sin error |
+
+O sea: la premisa del diseño (la cascada de `link_record_id`) y su conclusión
+eran correctas; lo que faltaba era *cuándo* se pisa la condición. Un
+`DELETE /me/links/:id` de a un link nunca la toca. La regla para B7 no es la
+salida que preveía el diseño (borrar en orden inverso desde el controlador)
+sino más simple: **un `unlink` por link, y el padre después de los hijos**.
+
+La lección que quedó anotada en el doc 15: una prueba que no cubre el espacio
+de casos da más confianza que la inferencia y puede errar igual. Al verificar
+un supuesto conviene decir qué escenarios se probaron.
+
+## B6 — `POST /me/links`, probada contra el backend real
+
+Replica `action_create_link` del wizard de Odoo —incluida la checklist sombra
+que el wizard crea y `Link.create` no— con las validaciones que un endpoint
+necesita y el wizard no tiene. Ocho escenarios verificados de punta a punta,
+como usuario portal por la API REST:
+
+1. `201` con el entry resuelto **desde el catálogo**, no del body: la
+   abreviación sale de `content_abbreviation` y el total de episodios de la
+   versión.
+2. La misma versión otra vez → `409 ALREADY_LINKED` con `checklistName` real,
+   buscado con el ORM del usuario (ADR-014), así que no puede filtrar la lista
+   de otro.
+3. `force: true` vincula igual.
+4. Una segunda versión de la misma franquicia y el mismo `contentType` reusa
+   el franchise-link: un solo grupo con dos hijos y su agregado.
+5. Un `displayNameId` que no pertenece al content → `422` con `field`.
+6. `syncWithLinkId` crea la copia con `isSynced: true`.
+7. Un `syncWithLinkId` de **otro usuario** → `404`, sin confirmar si existe.
+8. Login por `/auth/login` con cookie de sesión.
+
+Dos cosas que el test destapó: el `409` tiraba `500` porque
+`link_checklist_id` no está en `_LINK_FIELDS` y se leía igual; y un "dos
+franchise-links en vez de uno" que **no era un bug** — el fixture había
+elegido un juego y un anime de la misma saga, y la clave de reuso incluye el
+`contentType`, así que dos grupos es lo correcto.
 
 ## Verificación
 
