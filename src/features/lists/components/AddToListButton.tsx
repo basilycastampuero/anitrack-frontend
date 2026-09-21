@@ -1,8 +1,19 @@
 import { useRef, useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import { Check, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { LinkWizard } from '@/features/lists/components/LinkWizard'
 import { useInLibrary } from '@/features/lists/hooks/useInLibrary'
+import { useSessionStore } from '@/store/sessionStore'
+import { paths } from '@/router/paths'
 import { t } from '@/i18n/en'
 import type { AltName, VersionDetail } from '@/features/catalog/types'
 
@@ -14,6 +25,56 @@ interface AddToListButtonProps {
   contentNames: AltName[]
   franchiseNames?: AltName[]
   className?: string
+}
+
+/**
+ * Sin sesión el wizard no sirve: su árbol de carpetas depende de
+ * `useChecklists`, que está deshabilitado y se queda en `isPending` para
+ * siempre — un skeleton eterno. Las rutas de catálogo son públicas, así que
+ * este camino es de lo más común: se ofrece entrar, y volver a esta misma
+ * página después.
+ */
+function SignInPrompt({
+  open,
+  onOpenChange,
+  onClosed,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onClosed: () => void
+}) {
+  const location = useLocation()
+  const next = `${location.pathname}${location.search}`
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          onClosed()
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>{t.lists.wizard.signInTitle}</DialogTitle>
+          <DialogDescription>{t.lists.wizard.signInBody}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            {t.lists.wizard.cancel}
+          </Button>
+          <Button asChild>
+            <Link to={`${paths.login}?next=${encodeURIComponent(next)}`}>
+              {t.lists.wizard.signInCta}
+            </Link>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 /**
@@ -37,8 +98,10 @@ export function AddToListButton({
 }: AddToListButtonProps) {
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
+  const status = useSessionStore((state) => state.status)
   const { hasVersion } = useInLibrary()
   const linked = versionId != null && hasVersion(versionId)
+  const returnFocus = () => triggerRef.current?.focus()
 
   return (
     <>
@@ -57,17 +120,24 @@ export function AddToListButton({
         )}
         {linked ? t.card.inYourList : t.lists.wizard.trigger}
       </Button>
-      {open && (
-        <LinkWizard
-          open={open}
-          onOpenChange={setOpen}
-          versions={versions}
-          versionId={versionId}
-          contentNames={contentNames}
-          franchiseNames={franchiseNames}
-          onClosed={() => triggerRef.current?.focus()}
-        />
-      )}
+      {open &&
+        (status === 'authenticated' ? (
+          <LinkWizard
+            open={open}
+            onOpenChange={setOpen}
+            versions={versions}
+            versionId={versionId}
+            contentNames={contentNames}
+            franchiseNames={franchiseNames}
+            onClosed={returnFocus}
+          />
+        ) : (
+          <SignInPrompt
+            open={open}
+            onOpenChange={setOpen}
+            onClosed={returnFocus}
+          />
+        ))}
     </>
   )
 }

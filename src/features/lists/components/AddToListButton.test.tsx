@@ -11,6 +11,7 @@ import {
 import { render, screen, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter } from 'react-router-dom'
 import { server } from '@/mocks/server'
 import { AddToListButton } from '@/features/lists/components/AddToListButton'
 import { franchises } from '@/mocks/seed/franchises'
@@ -60,11 +61,13 @@ function renderButton(versionId: number) {
   })
   render(
     <QueryClientProvider client={client}>
-      <AddToListButton
-        versions={content.versions}
-        versionId={versionId}
-        contentNames={content.alternativeNames}
-      />
+      <MemoryRouter initialEntries={['/franchise/1-fullmetal-alchemist']}>
+        <AddToListButton
+          versions={content.versions}
+          versionId={versionId}
+          contentNames={content.alternativeNames}
+        />
+      </MemoryRouter>
     </QueryClientProvider>,
   )
   return userEvent.setup()
@@ -121,5 +124,25 @@ describe('AddToListButton — indicador "in your list" (3.9)', () => {
     expect(
       await screen.findByRole('button', { name: /Add to list/ }),
     ).toBeInTheDocument()
+  })
+
+  it('sin sesión ofrece entrar y volver, en vez de un wizard que no puede funcionar', async () => {
+    // El catálogo es público: sin sesión el árbol del wizard se quedaba en
+    // `isPending` para siempre, porque `useChecklists` está deshabilitado.
+    useSessionStore.setState({ user: null, status: 'unauthenticated' })
+    const user = renderButton(1005)
+
+    await user.click(await screen.findByRole('button', { name: /Add to list/ }))
+
+    expect(
+      await screen.findByText('Log in to start tracking'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('tree')).not.toBeInTheDocument()
+    expect(screen.queryByText('Pick a list first')).not.toBeInTheDocument()
+    // Y vuelve a la página donde estaba.
+    expect(screen.getByRole('link', { name: 'Log in' })).toHaveAttribute(
+      'href',
+      '/login?next=%2Ffranchise%2F1-fullmetal-alchemist',
+    )
   })
 })

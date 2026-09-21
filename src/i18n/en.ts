@@ -226,6 +226,10 @@ export const en = {
       added: (name: string) => `${name} added to your list`,
       undo: 'Undo',
       failed: 'Could not add it. Try again.',
+      signInTitle: 'Log in to start tracking',
+      signInBody:
+        'Your lists live in your account. Log in and we bring you right back to this page.',
+      signInCta: 'Log in',
       undoFailed: 'Could not undo that. Try again.',
       episodes: (count: number) =>
         count > 0 ? `${count} episodes` : 'Ongoing',

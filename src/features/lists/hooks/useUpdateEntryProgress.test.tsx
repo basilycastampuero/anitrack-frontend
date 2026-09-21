@@ -10,7 +10,7 @@ import {
 } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { http, HttpResponse } from 'msw'
+import { http, HttpResponse, delay } from 'msw'
 import type { ReactNode } from 'react'
 import { server } from '@/mocks/server'
 import { useUpdateEntryProgress } from '@/features/lists/hooks/useUpdateEntryProgress'
@@ -192,6 +192,53 @@ describe('useUpdateEntryProgress', () => {
     // Se deja correr un poco más para confirmar que no llega ninguno atrasado.
     await new Promise((resolve) => setTimeout(resolve, 200))
     expect(seen).toHaveLength(1)
+    server.events.removeAllListeners()
+  })
+
+  it('con el PATCH más lento que el debounce, el rollback vuelve al valor previo a TODA la ráfaga', async () => {
+    // El escenario que rompía la contabilidad de snapshots: mientras el primer
+    // commit sigue en vuelo entran más clicks. Antes el segundo commit se
+    // encolaba sin haber corrido su `onMutate`, así que el tercer click no
+    // tomaba snapshot nuevo y el rollback podía dejar un valor intermedio —o
+    // ninguno— en pantalla. Contra MSW no se alcanza (el PATCH mockeado tarda
+    // 150 ms y el debounce son 400), así que la lentitud se inyecta acá.
+    server.use(
+      http.patch('/api/v1/me/links/:id', async () => {
+        await delay(700)
+        return HttpResponse.error()
+      }),
+    )
+    const entry = looseEntry()
+    const { client, hook } = setup(entry, [entry])
+
+    act(() => hook.result.current.setProgress(13))
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    act(() => hook.result.current.setProgress(14))
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    act(() => hook.result.current.setProgress(15))
+
+    await waitFor(
+      () =>
+        expect(entriesInCache(client)[0]?.version?.watchedEpisodes).toBe(12),
+      { timeout: 4000 },
+    )
+    expect(toast.error).toHaveBeenCalled()
+  }, 10000)
+
+  it('desmontar con un commit pendiente lo manda igual, no lo descarta', async () => {
+    const seen: string[] = []
+    server.events.on('request:start', ({ request }) => {
+      if (request.method === 'PATCH') seen.push(request.url)
+    })
+
+    const entry = looseEntry()
+    const { hook } = setup(entry, [entry])
+    act(() => hook.result.current.setProgress(13))
+    // Antes de que venza el debounce: el episodio que el usuario ya vio subir
+    // no puede perderse porque cambió de carpeta.
+    hook.unmount()
+
+    await waitFor(() => expect(seen).toHaveLength(1))
     server.events.removeAllListeners()
   })
 

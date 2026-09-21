@@ -2,24 +2,25 @@ import type { ListEntry } from '@/features/lists/types'
 
 type AggregatedProgress = NonNullable<ListEntry['aggregatedProgress']>
 
-/** La etiqueta con la que un hijo aparece en el agregado del padre. */
-function groupLabelOf(child: ListEntry): string {
-  return child.version?.abbreviation ?? child.displayName
-}
-
 /**
- * Mueve `watched` del grupo `label` en `delta`, dejando el resto intacto
- * (ADR-021). No recalcula nada: `total` sale del catálogo y el orden de
- * `lv_record_order`, y ninguno de los dos cambia al mover episodios.
+ * Mueve `watched` del grupo que está en la posición `groupIndex`, dejando el
+ * resto intacto (ADR-021). No recalcula nada: `total` sale del catálogo y el
+ * orden de `lv_record_order`, y ninguno de los dos cambia al mover episodios.
+ *
+ * El grupo se identifica por POSICIÓN y no por su abreviación: la agregación
+ * emite un grupo por hijo, y dos versiones del mismo content vinculadas en la
+ * misma carpeta —la original y la doblada, por ejemplo— comparten
+ * `content_abbreviation`. Matchear por etiqueta movía las dos, o sea el doble
+ * del delta, que es justo el parpadeo que ADR-021 existe para evitar.
  */
-function shiftGroup(
+function shiftGroupAt(
   aggregated: AggregatedProgress,
-  label: string,
+  groupIndex: number,
   delta: number,
 ): AggregatedProgress {
   return {
-    groups: aggregated.groups.map((group) =>
-      group.abbreviation === label
+    groups: aggregated.groups.map((group, index) =>
+      index === groupIndex
         ? { ...group, watched: group.watched + delta }
         : group,
     ),
@@ -28,8 +29,8 @@ function shiftGroup(
 
 /**
  * Escribe `watchedEpisodes` en el entry `linkId` —suelto o hijo de un
- * franchise-link— y, si es hijo, aplica el **delta** al grupo del padre cuya
- * abreviación coincide.
+ * franchise-link— y, si es hijo, aplica el **delta** al grupo del padre que
+ * le corresponde por posición.
  *
  * Por qué un delta y no recalcular la agregación (ADR-021): subir episodios
  * solo puede mover un campo de un grupo. El `total` viene del catálogo y el
@@ -72,14 +73,21 @@ export function patchEntryProgress(
       version: { ...child.version, watchedEpisodes },
     }
 
+    // La agregación saltea los hijos que no son version-links, así que la
+    // posición del grupo es cuántos version-links vienen ANTES de este, no el
+    // índice crudo dentro de `childEntries`.
+    const groupIndex = children
+      .slice(0, index)
+      .filter((sibling) => sibling.version != null).length
+
     return {
       ...entry,
       childEntries: nextChildren,
       ...(entry.aggregatedProgress
         ? {
-            aggregatedProgress: shiftGroup(
+            aggregatedProgress: shiftGroupAt(
               entry.aggregatedProgress,
-              groupLabelOf(child),
+              groupIndex,
               delta,
             ),
           }

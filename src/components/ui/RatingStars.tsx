@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import { Star } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { t } from '@/i18n/en'
@@ -30,6 +31,9 @@ function fillOf(value: number, index: number): number {
  */
 export function RatingStars({ value, onChange, disabled, className }: RatingStarsProps) {
   const current = value ?? 0
+  // Dos `RatingStars` montados a la vez compartirían grupo de radios si el
+  // `name` fuera una constante de módulo.
+  const groupName = useId()
 
   return (
     <div className={cn('flex items-center gap-2', className)}>
@@ -42,7 +46,13 @@ export function RatingStars({ value, onChange, disabled, className }: RatingStar
         {Array.from({ length: STARS }).map((_, index) => {
           const fill = fillOf(current, index)
           return (
-            <span key={index} className="relative block size-6">
+            <span
+              key={index}
+              // El anillo va en la estrella y no en el `<label>`: los radios
+              // son `sr-only`, así que sin esto un usuario de teclado vidente
+              // mueve las flechas sin ver dónde está parado.
+              className="relative block size-6 rounded-sm has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring"
+            >
               <Star className="absolute inset-0 size-6 text-muted-foreground/40" aria-hidden />
               {fill > 0 && (
                 <span
@@ -64,7 +74,7 @@ export function RatingStars({ value, onChange, disabled, className }: RatingStar
                 >
                   <input
                     type="radio"
-                    name="entry-rating"
+                    name={groupName}
                     className="sr-only"
                     value={score}
                     checked={current === score}

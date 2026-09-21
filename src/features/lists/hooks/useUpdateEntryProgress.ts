@@ -11,10 +11,18 @@ import type { ListEntry, VersionEntry } from '@/features/lists/types'
 const COMMIT_DELAY_MS = 400
 
 interface Burst {
-  /** El cache tal como estaba en el PRIMER click de la ráfaga. */
+  /**
+   * El cache tal como lo dejó el último valor **confirmado por el servidor**.
+   * Vive mientras la cadena de commits siga viva y se limpia recién cuando
+   * queda ociosa, no cuando arranca un commit: con `scope`, un commit encolado
+   * no corre su `onMutate` hasta que liquida el anterior, así que consumirlo
+   * ahí dejaba ráfagas enteras sin a qué volver.
+   */
   snapshot?: ListEntry[]
   timer?: ReturnType<typeof setTimeout>
-  value?: number
+  /** Último valor que el usuario pidió y todavía no salió. */
+  pending?: number
+  inFlight: boolean
 }
 
 interface MutationContext {
@@ -31,19 +39,21 @@ interface MutationContext {
  *
  * El caso sincronizado usa el martillo a propósito: el contrato expone
  * `isSynced: boolean` pero no los ids de las copias, así que el cliente no
- * puede saber qué otras carpetas quedaron sucias. El costo es un refetch por
- * query activa; la alternativa era agregar `syncedWithLinkIds` al contrato.
+ * puede saber qué otras carpetas quedaron sucias.
  *
- * Contra la ráfaga del long-press, dos defensas (§4.3):
+ * Contra la ráfaga del long-press, tres defensas (§4.3):
  *
- * - `scope.id` serializa las mutaciones del mismo entry, así que nunca hay dos
- *   en vuelo sobre el mismo link y una respuesta vieja no puede pisar a una
- *   nueva. Como el contrato manda el valor **absoluto**, además son
- *   idempotentes en cualquier orden.
+ * - `scope.id` serializa las mutaciones del mismo entry, así que una respuesta
+ *   vieja no puede pisar a una nueva. Como el contrato manda el valor
+ *   **absoluto**, además son idempotentes en cualquier orden.
  * - El cache se escribe en cada click (feedback inmediato) pero el commit se
- *   debouncea: veinte pulsaciones terminan siendo un `PATCH` con el valor
- *   final. El snapshot de rollback se toma en el primer click de la ráfaga,
- *   no en cada uno, o revertir dejaría el valor intermedio.
+ *   debouncea: veinte pulsaciones terminan siendo un `PATCH`.
+ * - **Nunca hay más de un commit en vuelo.** Si el debounce vence con uno
+ *   todavía andando, el valor queda pendiente y lo manda `onSettled` cuando
+ *   el anterior liquida. Sin esto se encolaban commits cuyo `onMutate` no
+ *   había corrido, y el snapshot de rollback se desalineaba: el rollback podía
+ *   retroceder más de lo debido, o una mutación quedarse sin snapshot y dejar
+ *   en pantalla un valor que el servidor nunca aceptó.
  */
 export function useUpdateEntryProgress(
   checklistId: number,
@@ -51,7 +61,7 @@ export function useUpdateEntryProgress(
 ) {
   const queryClient = useQueryClient()
   const queryKey = useMemo(() => listKeys.entries(checklistId), [checklistId])
-  const burst = useRef<Burst>({})
+  const burst = useRef<Burst>({ inFlight: false })
   const { linkId } = entry
   const { isSynced } = entry.version
 
@@ -67,9 +77,7 @@ export function useUpdateEntryProgress(
 
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey })
-      const snapshot = burst.current.snapshot
-      burst.current.snapshot = undefined
-      return { snapshot }
+      return { snapshot: burst.current.snapshot }
     },
 
     // Se restaura el array ENTERO, no la fila: mismo criterio que
@@ -79,10 +87,30 @@ export function useUpdateEntryProgress(
       if (context?.snapshot) {
         queryClient.setQueryData(queryKey, context.snapshot)
       }
+      // La cadena se aborta entera: lo que quedaba pendiente nunca llegó al
+      // servidor, así que mandarlo después volvería a separar la pantalla de
+      // lo que el usuario acaba de ver revertirse.
+      if (burst.current.timer) clearTimeout(burst.current.timer)
+      burst.current = { inFlight: false }
       toast.error(t.lists.entry.progressError)
     },
 
     onSettled: () => {
+      burst.current.inFlight = false
+
+      // Commit de arrastre: los clicks que entraron mientras este estaba en
+      // vuelo salen ahora, en serie y no en paralelo.
+      const trailing = burst.current.pending
+      if (trailing != null && burst.current.timer == null) {
+        burst.current.pending = undefined
+        burst.current.inFlight = true
+        mutate(trailing)
+        return
+      }
+
+      if (burst.current.timer == null && burst.current.pending == null) {
+        burst.current.snapshot = undefined
+      }
       void queryClient.invalidateQueries({ queryKey })
       if (isSynced) {
         void queryClient.invalidateQueries({ queryKey: listKeys.all })
@@ -109,11 +137,16 @@ export function useUpdateEntryProgress(
         )
       }
 
-      burst.current.value = watchedEpisodes
+      burst.current.pending = watchedEpisodes
       if (burst.current.timer) clearTimeout(burst.current.timer)
       burst.current.timer = setTimeout(() => {
         burst.current.timer = undefined
-        mutate(watchedEpisodes)
+        if (burst.current.inFlight) return
+        const value = burst.current.pending
+        if (value == null) return
+        burst.current.pending = undefined
+        burst.current.inFlight = true
+        mutate(value)
       }, COMMIT_DELAY_MS)
     },
     [queryClient, queryKey, linkId, mutate],
@@ -122,22 +155,33 @@ export function useUpdateEntryProgress(
   useEffect(
     () => () => {
       const pending = burst.current
-      if (!pending.timer) return
-      clearTimeout(pending.timer)
-      const value = pending.value
-      burst.current = {}
+      if (pending.timer) clearTimeout(pending.timer)
+      const value = pending.pending
+      burst.current = { inFlight: false }
       if (value == null) return
-      // Desmontar con un commit pendiente (cambiar de carpeta justo después
-      // de tocar +) no puede perder el episodio que el usuario ya vio subir.
-      // Va por el service y no por `mutate` porque el observer ya no existe y
-      // sus callbacks no correrían; sin UI que revertir, la reconciliación la
-      // hace la invalidación, que no depende del componente.
-      void listsService
-        .updateLink(linkId, { watchedEpisodes: value })
-        .catch(() => undefined)
-        .finally(() => {
-          void queryClient.invalidateQueries({ queryKey: listKeys.all })
-        })
+      // Desmontar con un commit pendiente (cambiar de carpeta justo después de
+      // tocar +) no puede perder el episodio que el usuario ya vio subir. Va
+      // por el service y no por `mutate` porque el observer ya no existe y sus
+      // callbacks no correrían, así que el aviso de fallo se da acá a mano.
+      void (async () => {
+        try {
+          await listsService.updateLink(linkId, { watchedEpisodes: value })
+        } catch {
+          toast.error(t.lists.entry.progressError)
+        }
+        try {
+          // `refetchType: 'all'` y no el default `'active'`: la carpeta que
+          // quedó con el valor optimista ya no está montada, y marcarla stale
+          // sin refetchear hace que al volver se vea un frame con el número
+          // viejo.
+          await queryClient.invalidateQueries({
+            queryKey: listKeys.all,
+            refetchType: 'all',
+          })
+        } catch {
+          // El cliente puede haberse desmontado con la app entera.
+        }
+      })()
     },
     [linkId, queryClient],
   )

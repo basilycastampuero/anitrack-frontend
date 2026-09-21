@@ -81,15 +81,15 @@ export function useLinkWizard({
       toast.success(t.lists.wizard.added(entry.displayName), {
         action: {
           label: t.lists.wizard.undo,
+          // Sin `onError` acá: para cuando el usuario toca deshacer, este
+          // componente ya está desmontado y ese callback no correría. El
+          // aviso lo da `useDeleteLink` desde sus propias opciones.
           onClick: () =>
-            deleteLink.mutate(
-              {
-                linkId: entry.linkId,
-                checklistId: body.checklistId,
-                isSynced: entry.version?.isSynced,
-              },
-              { onError: () => toast.error(t.lists.wizard.undoFailed) },
-            ),
+            deleteLink.mutate({
+              linkId: entry.linkId,
+              checklistId: body.checklistId,
+              isSynced: entry.version?.isSynced,
+            }),
         },
       })
     } catch (caught) {

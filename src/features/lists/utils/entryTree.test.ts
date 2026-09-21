@@ -91,6 +91,21 @@ describe('patchEntryProgress', () => {
     expect(result[0]).toBe(untouched)
   })
 
+  it('con dos hijos de la misma abreviación mueve solo el que se tocó', () => {
+    // La original y la doblada del mismo content comparten
+    // `content_abbreviation`, así que el padre tiene dos grupos "S1". Antes se
+    // matcheaba por etiqueta y el agregado se movía el doble.
+    const entries = [
+      group([versionEntry(1, 10, 'S1'), versionEntry(2, 4, 'S1')]),
+    ]
+
+    const result = patchEntryProgress(entries, 2, 6)
+
+    const groups = result[0]?.aggregatedProgress?.groups
+    expect(groups?.[0]?.watched).toBe(10)
+    expect(groups?.[1]?.watched).toBe(6)
+  })
+
   it('devuelve la misma referencia si el linkId no está en la lista', () => {
     const entries = [versionEntry(1, 3, 'S1')]
     expect(patchEntryProgress(entries, 999, 5)).toBe(entries)
