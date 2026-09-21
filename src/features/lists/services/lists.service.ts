@@ -1,12 +1,16 @@
 import { z } from 'zod'
 import { http } from '@/lib/http'
-import { checklistNodeSchema, listEntrySchema } from '@/features/lists/services/schemas'
+import {
+  checklistNodeSchema,
+  listEntrySchema,
+} from '@/features/lists/services/schemas'
 import type {
   ChecklistNode,
   ListEntry,
   LibraryIndex,
   CreateChecklistRequest,
   UpdateChecklistRequest,
+  UpdateLinkRequest,
 } from '@/features/lists/types'
 
 const libraryIndexSchema = z.object({
@@ -15,6 +19,7 @@ const libraryIndexSchema = z.object({
 })
 
 const checklistResponseSchema = z.object({ checklist: checklistNodeSchema })
+const entryResponseSchema = z.object({ entry: listEntrySchema })
 
 export const listsService = {
   async getChecklists(): Promise<ChecklistNode[]> {
@@ -47,5 +52,16 @@ export const listsService = {
 
   async deleteChecklist(id: number): Promise<void> {
     await http.delete(`/me/checklists/${id}`)
+  },
+
+  /**
+   * `PATCH /me/links/:id` (doc 04). Devuelve el `ListEntry` completo con los
+   * agregados ya recalculados por el backend, que es lo que reconcilia el
+   * `onSettled` del optimistic update de 3.7 — el patch optimista es una
+   * suposición del cliente, esto es la verdad del servidor.
+   */
+  async updateLink(id: number, body: UpdateLinkRequest): Promise<ListEntry> {
+    const { data } = await http.patch(`/me/links/${id}`, body)
+    return entryResponseSchema.parse(data).entry
   },
 }

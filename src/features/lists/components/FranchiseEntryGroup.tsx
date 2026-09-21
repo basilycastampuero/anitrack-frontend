@@ -1,6 +1,10 @@
 import { useState } from 'react'
 import { ChevronRight, Film } from 'lucide-react'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import { ListEntryRow } from '@/features/lists/components/ListEntryRow'
 import { formatAggregatedProgress } from '@/features/lists/utils/progress'
 import { isVersionEntry } from '@/features/lists/types'
@@ -10,6 +14,8 @@ import type { ListEntry } from '@/features/lists/types'
 interface FranchiseEntryGroupProps {
   /** `kind === "franchise"`: agrupa sus version-links (`childEntries`). */
   entry: ListEntry
+  /** Se pasa tal cual a cada hijo: ausente ⇒ grupo de solo lectura. */
+  checklistId?: number | null
   className?: string
 }
 
@@ -43,11 +49,18 @@ function GroupThumbnail({ imageUrl }: { imageUrl: string | null }) {
  * omite esa parte del string cuando el usuario apagó "mostrar episodios"
  * para esta franquicia.
  */
-export function FranchiseEntryGroup({ entry, className }: FranchiseEntryGroupProps) {
+export function FranchiseEntryGroup({
+  entry,
+  checklistId,
+  className,
+}: FranchiseEntryGroupProps) {
   const [open, setOpen] = useState(true)
   const children = (entry.childEntries ?? []).filter(isVersionEntry)
   const groups = entry.aggregatedProgress?.groups ?? []
-  const progressLabel = entry.showProgress && groups.length > 0 ? formatAggregatedProgress(groups) : null
+  const progressLabel =
+    entry.showProgress && groups.length > 0
+      ? formatAggregatedProgress(groups)
+      : null
 
   return (
     <Collapsible
@@ -57,20 +70,31 @@ export function FranchiseEntryGroup({ entry, className }: FranchiseEntryGroupPro
     >
       <CollapsibleTrigger className="flex w-full items-center gap-3 px-3 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring">
         <ChevronRight
-          className={cn('size-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')}
+          className={cn(
+            'size-4 shrink-0 text-muted-foreground transition-transform',
+            open && 'rotate-90',
+          )}
           aria-hidden
         />
         <GroupThumbnail imageUrl={entry.imageUrl} />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-foreground">{entry.displayName}</p>
+          <p className="truncate text-sm font-medium text-foreground">
+            {entry.displayName}
+          </p>
           {progressLabel && (
-            <p className="truncate text-xs tabular-nums text-muted-foreground">{progressLabel}</p>
+            <p className="truncate text-xs tabular-nums text-muted-foreground">
+              {progressLabel}
+            </p>
           )}
         </div>
       </CollapsibleTrigger>
       <CollapsibleContent className="space-y-2 border-t border-border px-3 py-2">
         {children.map((child) => (
-          <ListEntryRow key={child.linkId} entry={child} />
+          <ListEntryRow
+            key={child.linkId}
+            entry={child}
+            checklistId={checklistId}
+          />
         ))}
       </CollapsibleContent>
     </Collapsible>

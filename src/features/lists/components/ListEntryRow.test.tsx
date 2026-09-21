@@ -1,12 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { ListEntryRow } from '@/features/lists/components/ListEntryRow'
-import type { ListEntry } from '@/features/lists/types'
+import type { ListEntry, VersionEntry } from '@/features/lists/types'
 
-function versionEntry(overrides: {
-  displayName?: string
-  version?: ListEntry['version']
-} = {}): ListEntry & { version: NonNullable<ListEntry['version']> } {
+function versionEntry(
+  overrides: {
+    displayName?: string
+    version?: ListEntry['version']
+  } = {},
+): VersionEntry {
   return {
     linkId: 5000,
     kind: 'version',

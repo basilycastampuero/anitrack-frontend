@@ -179,6 +179,11 @@ export const en = {
     newList: 'New list',
     entry: {
       synced: 'Synced',
+      /** `aria-label` de los dos botones del stepper: el número solo no dice
+       * de qué título es, y el botón no tiene texto propio. */
+      decrease: (name: string) => `One episode less of ${name}`,
+      increase: (name: string) => `One episode more of ${name}`,
+      progressError: 'Could not save your progress. Try again.',
     },
     menu: {
       trigger: (name: string) => `Actions for ${name}`,

@@ -105,8 +105,12 @@ export interface LibraryIndex {
  * evita `!`/`as` en los componentes de solo lectura (`ListEntryRow`,
  * `ChecklistEntries`) al elegir entre fila suelta y grupo de franquicia.
  */
-export function isVersionEntry(
-  entry: ListEntry,
-): entry is ListEntry & { kind: 'version'; version: NonNullable<ListEntry['version']> } {
+export function isVersionEntry(entry: ListEntry): entry is VersionEntry {
   return entry.kind === 'version' && entry.version != null
+}
+
+/** Un `ListEntry` ya narrowado por `isVersionEntry`: `version` está garantizado. */
+export type VersionEntry = ListEntry & {
+  kind: 'version'
+  version: NonNullable<ListEntry['version']>
 }
