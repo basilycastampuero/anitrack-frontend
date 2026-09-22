@@ -14,6 +14,12 @@ interface ChecklistTreeItemProps {
   onToggleExpand: (id: number) => void
   onSelect: (id: number) => void
   onKeyDown: (event: React.KeyboardEvent<HTMLLIElement>, id: number) => void
+  /**
+   * Se llama cuando un diálogo se cierra y el `<li>` de origen ya no está en
+   * el DOM — pasa al borrar la propia carpeta. Sin esto el foco se queda en el
+   * `<body>` y quien navega por teclado pierde su lugar en el árbol.
+   */
+  onFocusLost: () => void
   /** Sin menú de acciones: el nodo solo se selecciona (ver `ChecklistTree`). */
   compact?: boolean
 }
@@ -38,6 +44,7 @@ export function ChecklistTreeItem({
   onToggleExpand,
   onSelect,
   onKeyDown,
+  onFocusLost,
   compact = false,
 }: ChecklistTreeItemProps) {
   const hasChildren = node.children.length > 0
@@ -129,7 +136,17 @@ export function ChecklistTreeItem({
             node={node}
             open={menuOpen}
             onOpenChange={setMenuOpen}
-            onClosed={() => liRef.current?.focus()}
+            // Camino rápido para cuando el refetch YA sacó el nodo antes de
+            // que cerrara el diálogo. No es el caso habitual —lo normal es que
+            // el diálogo cierre primero y el nodo siga montado acá—, así que
+            // la recuperación de verdad la hace el efecto de
+            // `useTreeNavigation`, atado al cambio de datos. Esto solo evita
+            // un parpadeo cuando el orden se da al revés.
+            onClosed={() => {
+              const item = liRef.current
+              if (item?.isConnected) item.focus()
+              else onFocusLost()
+            }}
           />
         )}
       </div>
@@ -148,6 +165,7 @@ export function ChecklistTreeItem({
               onToggleExpand={onToggleExpand}
               onSelect={onSelect}
               onKeyDown={onKeyDown}
+              onFocusLost={onFocusLost}
               compact={compact}
             />
           ))}

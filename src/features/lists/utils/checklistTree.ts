@@ -69,3 +69,23 @@ export function patchChecklistNode(
   // editado obtiene identidades nuevas, el resto queda intacto.
   return changed ? result : tree
 }
+
+/**
+ * Busca un nodo por id en todo el árbol, no solo en el nivel superior.
+ *
+ * Vive acá y no inline en cada caller porque ya se había escrito tres veces a
+ * mano (en dos tests y en el mock). El árbol es recursivo: buscar solo en las
+ * raíces deja fuera cualquier carpeta anidada, que es el 80% del árbol del
+ * seed.
+ */
+export function findChecklistNode(
+  tree: ChecklistNode[],
+  id: number,
+): ChecklistNode | null {
+  for (const node of tree) {
+    if (node.id === id) return node
+    const found = findChecklistNode(node.children, id)
+    if (found) return found
+  }
+  return null
+}

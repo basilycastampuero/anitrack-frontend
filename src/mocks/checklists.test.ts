@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterEach, afterAll } from 'vitest'
 import { server } from '@/mocks/server'
 import { listsService } from '@/features/lists/services/lists.service'
+import { authService } from '@/features/auth/services/auth.service'
 import { ApiError } from '@/types/api.types'
 import type { ChecklistNode } from '@/features/lists/types'
 
@@ -90,5 +91,33 @@ describe('PATCH /me/checklists/:id — mover y reordenar', () => {
     expect(tree.map((node) => node.id)).toEqual([1, 2, 3])
     expect(find(tree, 3)?.name).toBe('Renamed')
     expect(find(tree, 3)?.children.map((child) => child.id)).toEqual([4])
+  })
+})
+
+/**
+ * Regresión: el handler devolvía `entriesByChecklist[id] ?? []` sin preguntar
+ * de quién era la carpeta ni si existía. El backend real sí valida
+ * (`_owned_folder_or_none`, `api_lists.py`) y responde 404 en ambos casos —
+ * el mock tenía que alinearse, no al revés (ver handlers.ts).
+ */
+describe('GET /me/checklists/:id/entries — pertenencia', () => {
+  it('una carpeta inexistente da NOT_FOUND en vez de una lista vacía', async () => {
+    const error = await listsService.getEntries(999999).catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(ApiError)
+    expect((error as ApiError).code).toBe('NOT_FOUND')
+  })
+
+  it('la carpeta de OTRO usuario da NOT_FOUND, nunca sus entries: era una fuga', async () => {
+    // Usuario 2 del seed (Sam Cortez, mocks/seed/lists.ts): checklists vacío.
+    await authService.login({ login: 'sam@example.com', password: 'password123' })
+
+    // "Watching" (1) es del usuario 1 (Alex Rivera) y sí tiene entries en el
+    // seed. Antes del fix, logueado como Sam esto devolvía los entries de
+    // Alex sin ningún chequeo de dueño.
+    const error = await listsService.getEntries(1).catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(ApiError)
+    expect((error as ApiError).code).toBe('NOT_FOUND')
   })
 })

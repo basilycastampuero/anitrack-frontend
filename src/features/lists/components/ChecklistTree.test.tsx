@@ -163,6 +163,48 @@ describe('ChecklistTree', () => {
     expect(allTime).toHaveAttribute('tabindex', '0')
   })
 
+  it('un cambio de selección posterior a una carpeta anidada colapsada también revela sus ancestros', async () => {
+    // Antes, `autoExpandedFor` era un booleano de "una sola vez en la vida":
+    // el primer montaje con "Watching" (1, sin ancestros) ya lo marcaba, y una
+    // selección posterior a "2010s" (6) —cuatro niveles bajo "Favorites" (3) >
+    // "All-time" (4) > "By decade" (5), todas colapsadas— dejaba de revelarse.
+    // Esto reproduce exactamente ese cambio: back/forward del navegador sobre
+    // el mismo `<ChecklistTree>` montado, no un refresh.
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const onSelect = vi.fn()
+    const { rerender } = render(
+      <QueryClientProvider client={client}>
+        <ChecklistTree selectedId={1} onSelect={onSelect} />
+      </QueryClientProvider>,
+    )
+    await screen.findByRole('treeitem', { name: 'Watching' })
+    expect(screen.getByRole('treeitem', { name: 'Favorites' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+
+    rerender(
+      <QueryClientProvider client={client}>
+        <ChecklistTree selectedId={6} onSelect={onSelect} />
+      </QueryClientProvider>,
+    )
+
+    const target = await screen.findByRole('treeitem', { name: '2010s' })
+    expect(target).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('treeitem', { name: 'Favorites' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    expect(screen.getByRole('treeitem', { name: 'All-time' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    expect(screen.getByRole('treeitem', { name: 'By decade' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+  })
+
   it('estado vacío: el usuario sin listas ve el CTA de starter lists (doc 12 §3.5c), no un árbol vacío', async () => {
     // Usuario nuevo registrado en el momento (id `Date.now()`, sin
     // checklists), no `sam@example.com` fijo del seed: el seed es mutable a

@@ -7,6 +7,7 @@ import { useDeleteChecklist } from '@/features/lists/hooks/useDeleteChecklist'
 import { useChecklists } from '@/features/lists/hooks/useChecklists'
 import { listKeys } from '@/features/lists/hooks/queryKeys'
 import { listsService } from '@/features/lists/services/lists.service'
+import { entriesByChecklist } from '@/mocks/seed/lists'
 import { useSessionStore } from '@/store/sessionStore'
 import type { UserSession } from '@/features/auth/types'
 
@@ -118,16 +119,21 @@ describe('useDeleteChecklist', () => {
     expect(client.getQueryState(listKeys.entries(4))?.isInvalidated).toBe(true)
   })
 
-  it('el mock también cascadea al borrar: los entries de una sub-carpeta borrada quedan huérfanos si no se limpian', async () => {
+  it('el mock cascadea al borrar: no quedan entries huérfanos de las sub-carpetas', async () => {
     // Reproduce el hallazgo del revisor sobre `handlers.ts`: `removeChecklistNode`
     // borra el nodo del árbol, pero `delete entriesByChecklist[id]` solo limpia
-    // el nivel borrado, no sus descendientes. Sin este fix, entries(4) seguiría
-    // devolviendo el link huérfano después de borrar "Favorites" (3).
-    // "All-time" (4) ya tiene su propio entry en el seed (mocks/seed/lists.ts),
-    // así que no hace falta fabricar uno a mano.
+    // el nivel borrado, no sus descendientes. Sin ese fix, los entries de
+    // "All-time" (4) sobrevivirían al borrado de "Favorites" (3).
     await listsService.deleteChecklist(3)
 
-    const entries = await listsService.getEntries(4)
-    expect(entries).toEqual([])
+    // La carpeta ya no existe, así que el endpoint la rechaza — igual que el
+    // backend real. Este test miraba el invariante PIDIENDO los entries de una
+    // carpeta borrada, cosa que el mock permitía y el backend no: esa
+    // divergencia escondía un bug de la UI (ver la revisión del árbol), así
+    // que se cerró y el invariante pasa a comprobarse donde vive.
+    await expect(listsService.getEntries(4)).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    })
+    expect(entriesByChecklist[4]).toBeUndefined()
   })
 })

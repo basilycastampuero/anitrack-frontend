@@ -73,6 +73,7 @@ export function ChecklistTree({
             onToggleExpand={nav.toggleExpand}
             onSelect={nav.selectNode}
             onKeyDown={nav.handleKeyDown}
+            onFocusLost={nav.focusCurrent}
             compact={compact}
           />
         ))}
