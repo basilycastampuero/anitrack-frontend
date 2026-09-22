@@ -836,3 +836,124 @@ sobre Node 22.
   falta de verificación con lectores de pantalla reales. Nada de esto se
   tocó en esta sesión.
 - Camino crítico sigue siendo **Sprint 3b** (tracking y vinculación, doc 07).
+
+## Actualización (2026-09-22) — Cierre de #9 a #14 (perdidos) y revisión nueva: #15 a #20
+
+> El Sprint 3a está cerrado desde hace tiempo (sección de arriba) y el
+> Sprint 3b ya mergeó a `main` (PR #4). Esto no es trabajo de sprint: es una
+> revisión de código nueva sobre la misma zona que dejaron sin detalle los
+> hallazgos #9–#14, corrida en la rama `fix/revision-arbol-listas` (sale de
+> `main`, después del merge del 3b). Se numera acá porque continúa
+> directamente la secuencia de la sección "Revisión pre-merge" de arriba.
+
+### #9 a #14: se cierran como PERDIDOS
+
+Quedaron anotados como "hallazgos bajos de la revisión pre-merge de
+3.5a/3.5b, sin detalle adicional registrado en ninguna sesión" — seis
+números sin archivo, sin línea y sin escenario, imposibles de accionar o de
+verificar. Se decidió **no intentar reconstruirlos**: se perdieron. Quedan
+cerrados con este motivo explícito, sin borrarlos de la bitácora, porque el
+episodio es la razón por la que la revisión de abajo anota cada hallazgo con
+archivo, línea y escenario.
+
+### Revisión nueva: el árbol de listas y su CRUD (3.5a/3.5b)
+
+Zona: 11 archivos de producción. Resultado: **6 hallazgos, todos de
+frontend** — `ll-odoo` no se tocó. Continúan la numeración global de esta
+bitácora (**#15 a #20**), no la numeración local 1–7 de la sección "Deuda
+abierta que dejó la revisión" de
+[16-sprint3b-avance.md](./16-sprint3b-avance.md) (esa lista es propia de ese
+documento, sin relación con esta secuencia).
+
+**Arreglados (4):**
+
+- **#15 (alto) — Borrar la carpeta que estabas viendo dejaba la URL apuntando
+  a un id muerto.** `MyListsPage.tsx` derivaba `selectedId` de la URL y nadie
+  la corregía cuando el nodo dejaba de existir. Contra MSW se veía como "lista
+  vacía"; contra el backend real, un `ErrorState` permanente con un "Try
+  again" que nunca iba a funcionar. Arreglado en `src/pages/MyListsPage.tsx`:
+  la página usa `useChecklists()` (misma query que el árbol, deduplicada por
+  TanStack, sin request extra) y navega a `paths.myLists` con `replace: true`
+  cuando el id ya no está en el árbol. La URL es responsabilidad de la
+  página, no del árbol ni del hook de borrado.
+- **#16 (medio) — Al borrar una carpeta, el foco se perdía al `<body>`.** El
+  primer intento ató la recuperación del foco al **cierre del diálogo** de
+  borrado (`onClosed`, delegando al árbol si el `<li>` de origen ya no
+  estaba en el DOM); no servía, y el agente de tests lo descubrió al intentar
+  escribir la regresión. La causa: `useDeleteChecklist` hace `void
+  queryClient.invalidateQueries(...)`, así que `onSuccess` devuelve
+  `undefined` y `mutateAsync` **no espera el refetch**. El diálogo cierra con
+  el nodo todavía montado, se reenfoca un elemento que está por desaparecer,
+  y recién después el refetch lo saca dejando el foco en el `<body>` — cuando
+  ya no queda ningún evento al que engancharse. La rama de fallback era, en
+  la práctica, inalcanzable. El arreglo real ata la recuperación al
+  **cambio de datos**, no a una sincronía inexistente entre el diálogo y
+  React Query: un efecto nuevo en `useTreeNavigation.ts` (`focusCurrent` +
+  el efecto que lo dispara) detecta que el nodo con foco desapareció de
+  `visible` y, solo si el foco se perdió de verdad (`document.activeElement`
+  es `body` o está desconectado), lo devuelve al vecino que el roving
+  tabindex ya eligió. Si el usuario se movió a otro control, no se lo roba.
+  **Lo más transferible del episodio**: el agente de tests se negó a escribir
+  el test con el assert aflojado para que pasara sobre el arreglo roto. Un
+  test verde sobre un arreglo que no funciona es peor que no tener test,
+  porque entierra el bug con un sello de aprobación.
+- **#17 (medio) — El mock devolvía los entries de cualquier carpeta, incluso
+  ajena o inexistente.** `GET /me/checklists/:id/entries` en
+  `src/mocks/handlers.ts` solo comprobaba que hubiera sesión, mientras el
+  backend real valida pertenencia y devuelve `404`
+  (`_owned_folder_or_none` en `api_lists.py`). **El mock se alineó al
+  backend, no al revés**, reutilizando el helper `findChecklist` ya usado en
+  el resto del archivo. Esta divergencia es lo que hizo invisible al #15
+  durante todo el desarrollo, que corre 100% mockeado. Es el mismo punto
+  "fuera del diff" que señaló la revisión pre-merge del Sprint 3b (hallazgo
+  local 7 de [16-sprint3b-avance.md](./16-sprint3b-avance.md)); queda
+  cerrado con este número.
+- **#18 (bajo) — El auto-expand de ancestros se marcaba "una sola vez en la
+  vida".** `useTreeNavigation.ts` usaba un booleano (`didAutoExpand`) que se
+  marcaba aunque el nodo seleccionado no tuviera ancestros que expandir; a
+  partir de ahí una selección posterior a una carpeta anidada colapsada ya no
+  se revelaba. Pasó a ser `autoExpandedFor` (el último `selectedId`
+  atendido).
+
+**Abiertos (2):**
+
+- **#19 (bajo) — `Space` no selecciona en el árbol.** `useTreeNavigation.ts`
+  maneja `Enter` pero no `Space`, y el patrón ARIA APG Tree View pide las
+  dos. Como el `treeitem` es un `<li>` y no un botón, `Space` tampoco dispara
+  el click nativo.
+- **#20 (bajo) — `useUpdateChecklist` no tiene `scope`.** Es el arreglo
+  hermano que sí recibió `useUpdateEntryProgress` en el Sprint 3b: dos
+  renombres del mismo nodo en vuelo pueden hacer que el rollback del primero
+  pise el resultado del segundo. Se auto-corrige en el refetch de
+  `onSettled`, así que es un parpadeo y no corrupción.
+
+**Revisado y sano** (importa tanto como los hallazgos, porque es lo que
+permite cerrar la zona con fundamento): `countDescendants` es correcta y su
+comentario documenta la trampa de contar dos veces; el `eslint-disable` de
+`ChecklistFormDialog` está bien puesto (la dependencia angosta es lo que
+evita pisar lo que el usuario tipea); el `onError` de
+`handleTogglePublish` sí corre porque el componente sigue montado; los dos
+cortes de burbujeo de teclado son deliberados y tienen test; el anillo de
+foco del roving tabindex existe; y el fan-out de las cuatro mutaciones
+coincide con la decisión cerrada.
+
+### Verificación
+
+Corrido desde `anitrack-frontend/` en esta sesión, rama
+`fix/revision-arbol-listas`:
+
+```bash
+npm run typecheck   # limpio
+npm run lint        # 0 errores
+npx vitest run       # 48 archivos, 262 tests, todos en verde (venía de 46/250)
+```
+
+Cada test de regresión se confirmó **fallando contra el código anterior**,
+salvo dos guardas de "no rompas esto" que pasan en ambas versiones y están
+marcadas como tales. Detalle de método: uno de los tests daba un falso verde
+porque `toHaveTextContent()` hace match por substring y `'/my-lists'` calza
+dentro de `'/my-lists/2'`.
+
+**Nota de estado**: al momento de escribir esta sección, los cambios de
+código y de esta bitácora viven en la rama `fix/revision-arbol-listas`,
+todavía sin commitear.

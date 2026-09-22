@@ -188,7 +188,11 @@ con RTT mayor a 400 ms, y el test de regresión inyecta esa lentitud a mano.
 
 ### Deuda abierta que dejó la revisión
 
-Numerada acá para que no se pierda; nada de esto bloquea el merge.
+Numerada acá para que no se pierda; nada de esto bloquea el merge. **Esta
+numeración (1–7) es local a esta sección**, no continúa la secuencia global
+de hallazgos de [13-sprint3a-avance.md](./13-sprint3a-avance.md) (#1 en
+adelante) — no confundirla con los #15–#20 de esa bitácora, que vienen de
+una revisión distinta y posterior.
 
 1. **El botón "Back" del paso `target` del wizard cancela el wizard entero**:
    la máquina de estados no tiene transición `target → version`. Hoy es
@@ -219,7 +223,9 @@ Numerada acá para que no se pierda; nada de esto bloquea el merge.
    devuelve los entries sin verificar que la carpeta sea del usuario logueado
    — `requireUser()` solo comprueba que haya sesión. Es la misma clase de fuga
    que 3.12 cerró en la ruta pública y, ahora que existe `findChecklist`, son
-   dos líneas.
+   dos líneas. **[CERRADO 2026-09-22]** — reutiliza `findChecklist` como acá
+   se anticipaba; queda con el número global **#17** en la revisión nueva de
+   [13-sprint3a-avance.md](./13-sprint3a-avance.md#actualización-2026-09-22--cierre-de-9-a-14-perdidos-y-revisión-nueva-15-a-20).
 
 ## Verificación empírica del carril B (2026-09-21)
 
@@ -403,11 +409,14 @@ escenarios de accesibilidad con lector de pantalla real siguen sin probarse
   `checklistResponseSchema`** (`src/features/lists/services/lists.service.ts`)
   — deuda de B5 (Sprint 3a), verificado en esta sesión que sigue sin
   exportarse.
-- Deuda heredada del Sprint 3a sin cambios en esta sesión: **#9 a #14**, el
-  punto de entrada de logout en la UI (verificado en esta sesión: sigue sin
-  ningún componente usando `useLogout`), el alcance de la `ir.rule` de
-  ADR-014 a `base.group_portal`, y la falta de verificación con lectores de
-  pantalla reales.
+- Deuda heredada del Sprint 3a: el punto de entrada de logout en la UI
+  (verificado en esta sesión: sigue sin ningún componente usando
+  `useLogout`), el alcance de la `ir.rule` de ADR-014 a `base.group_portal`,
+  y la falta de verificación con lectores de pantalla reales. **#9 a #14 se
+  cerraron como perdidos el 2026-09-22** (irreconstruibles, sin
+  archivo/línea/escenario) y una revisión nueva sobre el árbol de listas los
+  reemplazó por los hallazgos #15–#20 — ver la actualización del
+  2026-09-22 en [13-sprint3a-avance.md](./13-sprint3a-avance.md).
 - Seguir la conversación con Chano en
   [`../docs-backend/08-preguntas-backend.md`](../docs-backend/08-preguntas-backend.md):
   el `invitation_scope` de producción y si acepta el trabajo de `ll-odoo`

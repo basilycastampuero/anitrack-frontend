@@ -252,6 +252,8 @@ path.
 | 4.8 | README de portafolio | Screenshots/GIF, stack, arquitectura, link a docs, demo con cuenta seed | Redactado en inglés |
 | 4.9 | (stretch) Infinite scroll catálogo | `useInfiniteQuery` | — |
 | 4.10 | (stretch) Drag & drop en árbol/entries | dnd-kit | — |
+| 4.11 | ⚪ `Space` no selecciona en el árbol | `useTreeNavigation.ts` maneja `Enter` pero no `Space`, y el patrón ARIA APG Tree View pide las dos; como el `treeitem` es un `<li>` y no un botón, `Space` tampoco dispara el click nativo. Hallazgo #19 de la revisión post-3b ([13-sprint3a-avance.md](./13-sprint3a-avance.md#actualización-2026-09-22--cierre-de-9-a-14-perdidos-y-revisión-nueva-15-a-20)) | Con el foco en un nodo, `Space` lo selecciona igual que `Enter` |
+| 4.12 | ⚪ `useUpdateChecklist` sin `scope` | Dos renombres del mismo nodo en vuelo pueden hacer que el rollback del primero pise el resultado del segundo; se auto-corrige en el refetch de `onSettled`, así que es un parpadeo y no corrupción. Hallazgo #20 de la misma revisión ([13-sprint3a-avance.md](./13-sprint3a-avance.md#actualización-2026-09-22--cierre-de-9-a-14-perdidos-y-revisión-nueva-15-a-20)) | Mismo patrón que ya tiene `useUpdateEntryProgress` desde el Sprint 3b: `scope: { id: ... }` por nodo |
 
 ## Definition of Done (toda tarea de UI)
 
