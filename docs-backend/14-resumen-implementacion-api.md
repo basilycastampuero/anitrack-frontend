@@ -127,6 +127,53 @@ algún día:
   /me/links/:id` (B7) lo absorbe dentro de la transacción del request y
   verifica después que la fila no exista, en vez de tocar `ll_checklist`.
 
+- **`ll_oauth` tiene un `except AccessDenied` sin importar `AccessDenied`**
+  (defecto de `ll_oauth`, no de esta API). En
+  `ll_oauth/models/res_users.py:27` hay un `except AccessDenied as
+  access_denied_exception:`, pero el archivo solo importa `ValidationError`
+  de `odoo.exceptions` (líneas 3–4: `from odoo import models, fields, api` y
+  `from odoo.exceptions import ValidationError`). El nombre `AccessDenied` no
+  está definido en ese scope, así que **si esa rama llega a ejecutarse
+  levanta un `NameError` en vez de rechazar el login**, y el usuario recibe un
+  500 en lugar del error de credenciales.
+
+  Cómo se llega ahí: es el camino de un login por OAuth que el proveedor
+  rechaza. Hoy nadie lo pisa porque no hay ningún `auth.oauth.provider`
+  configurado en la base local, así que el flujo real de OAuth nunca corre —
+  por eso el defecto sigue latente y no lo destapó ninguna de las pruebas de
+  los Sprints 3a y 3b.
+
+  El arreglo es una línea: agregar `AccessDenied` al import de
+  `odoo.exceptions`. **No se aplicó a propósito.** Todo el trabajo propio de
+  estos sprints vive en `ll_webpage`, que es un módulo nuevo; `ll_checklist` y
+  `ll_oauth` no se tocaron nunca — cuando `Link.unlink()` dio problemas se lo
+  rodeó desde el controlador en vez de parchear el modelo (ver el hallazgo
+  anterior). Corregir esto sería la primera modificación a un módulo original,
+  y se prefiere reportarlo antes que cambiarlo en una rama que su autor no ve.
+  Es de los hallazgos más fáciles de arreglar y de los más molestos de
+  diagnosticar en producción, así que conviene que lo sepa.
+
+- **El grupo del usuario que crea el alta por OAuth es CONFIGURACIÓN de la
+  base, no código.** ADR-015 asumía que `_auth_oauth_signin` deja al usuario
+  nuevo en el grupo Portal, y eso importa porque la `ir.rule` que aísla
+  `/me/*` está acotada a `base.group_portal` (ADR-014): un usuario que cayera
+  en otro grupo no tendría restricción y vería datos de todos.
+
+  Verificado en la base local sin necesidad de ninguna app de Twitch, porque
+  el grupo no lo decide el código sino el "template user" del alta: Odoo copia
+  sus grupos al crear el usuario. En esta base,
+  `base.template_portal_user_id = 5` → usuario `portaltemplate`, con
+  `share = true` y un solo grupo, **User types / Portal**. Y
+  `auth_signup.invitation_scope = b2c`, o sea alta libre. El supuesto se
+  sostiene acá.
+
+  Lo que **no** se puede verificar desde acá es la instancia de Chano: los dos
+  valores son parámetros de sistema y pueden diferir. Si en producción el
+  template user no fuera Portal, el aislamiento de `/me/*` dejaría de aplicar
+  para los usuarios creados por OAuth, sin ningún cambio de código y sin
+  ningún error visible. Vale la pena que lo confirme antes de habilitar el
+  alta social.
+
 Detalle completo de cada uno, con más contexto, en
 [`../docs/13-sprint3a-avance.md`](../docs/13-sprint3a-avance.md) (tareas B2,
 B3, B4) y en [02-analisis-backend-odoo.md](./02-analisis-backend-odoo.md).

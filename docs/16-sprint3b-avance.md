@@ -18,7 +18,7 @@
 | 3.10 | Perfil público + stats | ✅ (commit `e971eaf`) |
 | 3.13 | Cierre de la deuda #6 | ✅ (commit `dc138a0`) |
 | 3.11 | RatingStars [flag] + notas | ✅ (commit `4cd9391`) |
-| 3.3b | OAuth Twitch end-to-end | ⬜ pendiente — ⚪ recortable, depende de B9 (carril B) y de registrar una app de Twitch propia |
+| 3.3b | OAuth Twitch end-to-end | ⬜ **diferido al Sprint 4** por su propia regla de corte (⚪ recortable): depende de registrar una app de Twitch, que es trabajo del dueño y no de código. La mitad que no dependía de Twitch se hizo — ver el cierre abajo |
 
 > Carril A cierra **7/8**. Fuera de la tabla del plan hay un noveno commit,
 > `1059c51` (fix de CI: apagar la latencia simulada de MSW bajo Vitest — ver
@@ -28,13 +28,14 @@
 
 | # | Tarea | Estado |
 |---|---|---|
-| B6 | `POST /me/links` + `ir.rule` de copias (ADR-020, OR→AND) | ✅ hecha (2026-09-21) |
-| B7 | `PATCH`/`DELETE /me/links/:id` | ⬜ pendiente |
-| B8 | `/users/:id/profile` + `/users/:id/checklists/:id/entries` | ⬜ pendiente |
-| B9 | `GET /auth/oauth/twitch` (solo si va 3.3b) | ⬜ pendiente |
-| B10 | Checkpoint de contrato | ⬜ pendiente |
+| B6 | `POST /me/links` + `ir.rule` de copias (ADR-020, OR→AND) | ✅ (commits `d3be430` y `11883fe`) |
+| B7 | `PATCH`/`DELETE /me/links/:id` | ✅ (commit `4deada8`) |
+| B8 | `/users/:id/profile` + `/users/:id/checklists/:id/entries` | ✅ (commit `6e104f2`) |
+| B9 | `GET /auth/oauth/twitch` (solo si va 3.3b) | ⬜ diferido al Sprint 4, junto con 3.3b |
+| B10 | Checkpoint de contrato | ✅ (2026-09-22, sin drift) |
 
-> Carril B en **1/5**. Arrancó el 2026-09-21, cuando pudo levantarse el Odoo
+> Carril B en **4/5**, y el quinto (B9) se difiere junto con 3.3b. Arrancó
+> el 2026-09-21, cuando pudo levantarse el Odoo
 > local (faltaba activar la integración WSL de Docker Desktop para la distro).
 > Antes de escribir una línea se reverificaron empíricamente los dos supuestos
 > que el diseño había marcado como inferidos — ver "Verificación empírica del
@@ -286,6 +287,86 @@ franchise-links en vez de uno" que **no era un bug** — el fixture había
 elegido un juego y un anime de la misma saga, y la clave de reuso incluye el
 `contentType`, así que dos grupos es lo correcto.
 
+## Cierre: B8, B10 y la decisión sobre 3.3b
+
+### B8 — perfiles públicos
+
+Primer endpoint del módulo que expone datos de **otro** usuario y el primero
+que atiende sin sesión, lo que invierte la regla de `api_lists.py`: allá el
+aislamiento lo hace la `ir.rule` porque todo corre con el ORM del usuario;
+acá no hay usuario a quien aplicarle una regla, así que cae en ADR-010
+—`sudo()` con filtro explícito— y **el filtro pasa a ser lo único que separa
+lo público de lo privado**. Por eso va en los tres dominios y está comentado
+como tal: olvidarlo en cualquiera de los tres publica las listas privadas.
+
+Ocho escenarios verificados sin cookie de sesión, con un fixture donde una
+carpeta privada contiene a una publicada. Los dos que más importan: la
+sub-carpeta publicada **sube como raíz** del bosque y la privada no aparece; y
+las stats reportan 12 episodios mientras la lista privada tiene 100 cargados
+—si el filtro faltara en el `read_group`, ese número se filtraría—.
+
+Dos decisiones de implementación: `imageUrl` de las checklists va en `null`,
+porque las portadas se sirven por `GET /me/images/<id>`, que exige sesión a
+propósito (pueden ser imágenes que el usuario subió, ADR-019) y un visitante
+anónimo recibiría 401; y no hace falta el finder recursivo que sí necesita el
+mock, porque `checklist_published` es por registro y un solo `search` con el
+filtro resuelve los cuatro casos de rechazo con el mismo `404`.
+
+### B10 — checkpoint de contrato, sin drift
+
+Corrido por el agente de tests y **no** por quien escribió B6–B8, que es la
+condición que le pone el diseño (§10) y la razón por la que B5 encontró un
+drift real en el 3a. Catorce verificaciones de los esquemas Zod del frontend
+contra las respuestas reales del Odoo local, más la paridad MSW ↔ real de los
+cuatro invariantes de §4.4 (`linkCount`, agrupado, propagación a copias, padre
+huérfano): **los cuatro se comportan igual en los dos lados**.
+
+**Sin drift.** A diferencia de B5, no apareció ningún desalineamiento entre el
+doc 04, los esquemas del frontend y el backend. Se validó en particular el
+payload nuevo del `409` (§5.2) con dos usuarios en carpetas distintas, y que
+una lista privada **anidada** dé `404` por la ruta pública.
+
+Cerró de paso la deuda de B5: `libraryIndexSchema` y `checklistResponseSchema`
+pasaron a estar exportados en `lists.service.ts`.
+
+**Lo que el checkpoint NO dejó**: nada reproducible. El test se escribió, se
+corrió y se borró, con una razón válida —un `*.test.ts` que pega a
+`localhost:8069` rompería `npm run test` y la CI en cualquier entorno sin Odoo
+local— y descartando bien la variante de script suelto, porque importar los
+esquemas reales necesita resolución del alias `@/` y reimplementarlos anularía
+el sentido del checkpoint. Queda como deuda una tercera vía que no se exploró:
+un archivo que **no matchee el patrón de test** (`src/mocks/checkpoint-b10.ts`)
+invocado explícitamente. B5 y B10 ya se escribieron de cero dos veces.
+
+### 3.3b se difiere, y la mitad que no dependía de Twitch se hizo
+
+Por su propia regla de corte: registrar una app de Twitch es trabajo del dueño
+del proyecto, no de código, y 3.3a —el flujo completo mockeado— ya es el
+entregable de portafolio. B9 se va con ella al Sprint 4.
+
+Lo que sí se hizo, porque no dependía de Twitch: **`OAuthButtons` ahora está
+también en `RegisterPage`**. Estaba solo en `LoginPage`, así que quien llegaba
+a registrarse no veía la opción social que sí veía al iniciar sesión. Era
+deuda del Sprint 3a mal clasificada como parte de 3.3b. Su test necesitó el
+`TooltipProvider` que `LoginPage.test` ya tenía, porque el botón muestra un
+tooltip en modo mock.
+
+**Y se verificó el tercer supuesto de §2.2 sin necesidad de Twitch.** ADR-015
+asumía que `_auth_oauth_signin` deja al usuario nuevo en el grupo Portal, y eso
+sostiene el aislamiento de ADR-014: un usuario en otro grupo no tendría
+`ir.rule` y vería datos de todos. El grupo no lo decide el código sino el
+"template user" del alta, que es **configuración de la base**: acá
+`base.template_portal_user_id = 5` → usuario `portaltemplate`, `share = true`,
+un solo grupo, **User types / Portal**, con
+`auth_signup.invitation_scope = b2c`. El supuesto se sostiene en esta base.
+
+Lo que queda abierto es la instancia de Chano, donde esos dos parámetros pueden
+diferir sin ningún cambio de código y sin error visible. Está anotado en
+`docs-backend/14` junto al defecto de `ll_oauth` (`except AccessDenied` sin
+importar `AccessDenied`, `res_users.py:27`), que **no se arregló a propósito**:
+sería la primera modificación a un módulo original de Chano, y reportárselo
+vale más que cambiárselo en una rama que no ve.
+
 ## Verificación
 
 Corrido en esta sesión desde `anitrack-frontend/` (rama `sprint-3b-tracking`):
@@ -293,7 +374,7 @@ Corrido en esta sesión desde `anitrack-frontend/` (rama `sprint-3b-tracking`):
 ```bash
 npm run typecheck   # limpio
 npm run lint        # 0 errores
-npx vitest run      # 46 archivos, 249 tests, todos en verde
+npx vitest run      # 46 archivos, 250 tests, todos en verde
 ```
 
 **Verificación visual**, según lo registrado en cada commit (Chromium propio
