@@ -859,12 +859,13 @@ nota de B4 dice cerrar, y abre uno peor**:
 > la validación con el ORM del usuario que esta decisión exige como defensa en
 > profundidad (ver **Decisión**) está implementada y probada, no solo prevista.
 > El otro supuesto inferido en la misma sesión (`Link.unlink()`) corrió peor
-> suerte y quedó anotado en doc 15 §2.2: no se refuta ni se confirma entero,
-> el `MissingError` existe pero solo aparece si el recordset trae el
-> franchise-link padre y sus hijos juntos. Nada de eso toca a este ADR, pero
-> sí deja una advertencia que le aplica: la primera prueba de ese supuesto
-> cubrió un solo escenario, no vio el error y estuvo a punto de cerrarlo en
-> falso. Cuando esta regla se re-verifique (por ejemplo si aparece otro modelo
+> suerte y quedó anotado en doc 15 §2.2: el `MissingError` existe y el camino
+> de un usuario portal lo pisa en **cada** borrado de un link con sombra. Nada
+> de eso toca a este ADR, pero sí deja una advertencia que le aplica, y fuerte:
+> ese supuesto se caracterizó **mal dos veces** antes de cerrar, las dos por
+> probar un camino y hablar de todos — primero un solo borrado, después cuatro
+> casos pero todos con el ORM del admin, que por ser superusuario no dispara la
+> comprobación que falla. Cuando esta regla se re-verifique (por ejemplo si aparece otro modelo
 > con copias en Sprint 4), vale la pena enumerar **qué** escenarios se
 > probaron, como hace la lista de arriba, y no solo el veredicto.
 
