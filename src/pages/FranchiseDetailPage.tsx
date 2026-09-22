@@ -8,9 +8,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { FranchiseHeader } from '@/features/catalog/components/FranchiseHeader'
 import { ContentSection } from '@/features/catalog/components/ContentSection'
 import { FranchiseGallery } from '@/features/catalog/components/FranchiseGallery'
+import { AddToListButton } from '@/features/lists/components/AddToListButton'
 import { useFranchiseDetail } from '@/features/catalog/hooks/useFranchiseDetail'
 import { parseIdParam } from '@/utils/slug'
 import { ApiError } from '@/types/api.types'
+import type { ContentDetail, VersionDetail } from '@/features/catalog/types'
 import { t } from '@/i18n/en'
 
 /**
@@ -45,7 +47,10 @@ export default function FranchiseDetailPage() {
   }
 
   if (franchise.isError) {
-    if (franchise.error instanceof ApiError && franchise.error.code === 'NOT_FOUND') {
+    if (
+      franchise.error instanceof ApiError &&
+      franchise.error.code === 'NOT_FOUND'
+    ) {
       return (
         <PageWrapper>
           <EmptyState
@@ -63,6 +68,20 @@ export default function FranchiseDetailPage() {
   }
 
   const data = franchise.data
+
+  // La página es el único lugar que ensambla `catalog` con `lists` (doc 15
+  // §3.4): `ContentSection` y `VersionsTable` solo reservan el lugar de la
+  // acción, y el botón que la llena vive en `features/lists`.
+  const versionAction =
+    (content: ContentDetail) => (version: VersionDetail) => (
+      <AddToListButton
+        versions={content.versions}
+        versionId={version.id}
+        contentNames={content.alternativeNames}
+        franchiseNames={data.alternativeNames}
+      />
+    )
+
   const hasVideos = data.videoContents.length > 0
   const hasGames = data.gameContents.length > 0
   const hasBothTypes = hasVideos && hasGames
@@ -91,6 +110,7 @@ export default function FranchiseDetailPage() {
                 content={content}
                 franchiseId={data.id}
                 franchiseName={data.name}
+                renderVersionAction={versionAction(content)}
               />
             ))}
           </TabsContent>
@@ -101,6 +121,7 @@ export default function FranchiseDetailPage() {
                 content={content}
                 franchiseId={data.id}
                 franchiseName={data.name}
+                renderVersionAction={versionAction(content)}
               />
             ))}
           </TabsContent>
@@ -115,6 +136,7 @@ export default function FranchiseDetailPage() {
               content={content}
               franchiseId={data.id}
               franchiseName={data.name}
+              renderVersionAction={versionAction(content)}
             />
           ))}
         </div>

@@ -10,6 +10,7 @@ import RegisterPage from '@/pages/RegisterPage'
 import { paths } from '@/router/paths'
 import { t } from '@/i18n/en'
 import { useSessionStore } from '@/store/sessionStore'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
 afterEach(() => server.resetHandlers())
@@ -24,7 +25,11 @@ function renderRegister(url = paths.register) {
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={[url]}>{children}</MemoryRouter>
+        {/* `OAuthButtons` muestra un tooltip en modo mock, y Radix exige el
+            provider — mismo wrapper que `LoginPage.test`. */}
+        <TooltipProvider>
+          <MemoryRouter initialEntries={[url]}>{children}</MemoryRouter>
+        </TooltipProvider>
       </QueryClientProvider>
     )
   }
@@ -136,5 +141,15 @@ describe('RegisterPage', () => {
 
     expect(await screen.findByText(t.states.errorTitle)).toBeInTheDocument()
     expect(useSessionStore.getState().status).not.toBe('authenticated')
+  })
+
+  it('ofrece el alta social, igual que la página de login', async () => {
+    // Hueco del Sprint 3a: `OAuthButtons` había quedado solo en `LoginPage`,
+    // así que quien llegaba a registrarse no veía la opción que sí veía al
+    // iniciar sesión. En modo mock el botón está deshabilitado con su
+    // tooltip, pero tiene que existir.
+    renderRegister()
+
+    expect(await screen.findByText(t.auth.oauth.twitch)).toBeInTheDocument()
   })
 })

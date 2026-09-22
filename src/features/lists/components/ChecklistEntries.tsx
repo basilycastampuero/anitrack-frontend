@@ -63,9 +63,9 @@ export function ChecklistEntries({ checklistId, className }: ChecklistEntriesPro
       {entries.data.map((entry) => (
         <li key={entry.linkId}>
           {isVersionEntry(entry) ? (
-            <ListEntryRow entry={entry} />
+            <ListEntryRow entry={entry} checklistId={checklistId} />
           ) : (
-            <FranchiseEntryGroup entry={entry} />
+            <FranchiseEntryGroup entry={entry} checklistId={checklistId} />
           )}
         </li>
       ))}

@@ -8,6 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { OAuthButtons } from '@/features/auth/components/OAuthButtons'
 import { RegisterForm } from '@/features/auth/components/RegisterForm'
 import { paths, safeNext } from '@/router/paths'
 import { t } from '@/i18n/en'
@@ -29,6 +30,12 @@ export default function RegisterPage() {
         </CardHeader>
         <CardContent>
           <RegisterForm next={next} />
+          {/* Mismo bloque que `LoginPage`: en el 3a quedó solo ahí, así que
+              quien llegaba a registrarse no veía la opción social que sí veía
+              al iniciar sesión. El alta por OAuth no necesita pasar antes por
+              el formulario — `_auth_oauth_signin` crea el usuario si no
+              existe. */}
+          <OAuthButtons next={next} />
         </CardContent>
         <CardFooter className="justify-center text-sm text-muted-foreground">
           {t.auth.register.haveAccount}

@@ -819,11 +819,55 @@ nota de B4 dice cerrar, y abre uno peor**:
   regla anterior (solo `lc_left_id`) la fila era invisible para la víctima y no
   le rompía nada.
 
-> **Estado de verificación.** Esto es razonamiento sobre el código y sobre la
-> semántica de `ir.rule` en Odoo 17, **no** una prueba empírica: el Odoo local
-> no estaba disponible en la sesión de diseño. La verificación con dos usuarios
-> portal es CA de la tarea B6. Si la prueba lo contradice, este ADR se corrige
-> en vez de dejarse afirmando algo falso.
+> **Estado de verificación — VERIFICADO Y APLICADO (2026-09-21).** Los dos
+> párrafos de arriba se escribieron como razonamiento sobre el código y sobre
+> la semántica de `ir.rule` en Odoo 17, sin prueba empírica: el Odoo local no
+> estaba disponible en la sesión de diseño. **Ya se probó, y el razonamiento
+> era correcto en los dos puntos, DoS incluido.**
+>
+> Cómo: Odoo local en Docker, dos usuarios portal reales con su
+> `ll.checklist.user`, una checklist y un link cada uno, el mismo script
+> corrido **antes y después** del cambio, con `ll_webpage` actualizado en
+> medio para que la `ir.rule` recargara.
+>
+> Con el `'|'` (OR):
+>
+> - El portal A creó **sin error** una fila de `ll.checklist.link.copy` con
+>   `lc_left_id` propio y `lc_right_id` apuntando al link de B — el
+>   `check_access_rule('create')` la dejó pasar, como preveía el ADR.
+> - Acto seguido, B **no pudo** escribir `lv_episodes` en su propio link:
+>   `AccessError`. El vector de denegación de servicio cruzado no era una
+>   posibilidad teórica; ocurre.
+>
+> Con el AND (ya aplicado en `ll-odoo`,
+> `ll_webpage/security/portal_access.xml`, rama `anitrack/rest-catalog-api`,
+> **sin pushear** al remoto de Chano):
+>
+> - A recibe `AccessError` al intentar crear la fila cruzada.
+> - B vuelve a escribir `lv_episodes` en su link sin problema.
+> - El admin conserva lectura y borrado sobre `link.copy` — la regresión que
+>   ADR-014 obliga a mirar cada vez que se toca una regla, sin novedad.
+> - Y lo que había que comprobar para no cambiar un agujero de seguridad por
+>   una feature rota: las **copias legítimas** (ambos lados del mismo dueño,
+>   que es exactamente lo que creará `syncWithLinkId` en B6) se crean y son
+>   visibles con el ORM del propio usuario. El AND no pierde ninguna fila real.
+>
+> Efecto sobre la tarea B6: la regla se aplicó primero y sus CA (b), (c) y (d)
+> quedaron cubiertas a nivel ORM ahí mismo; el endpoint vino después y **B6
+> está completa**, con 8 de 8 escenarios verificados contra el Odoo local
+> (doc 15 §6.3). Entre ellos, el `404` por `syncWithLinkId` de otro usuario:
+> la validación con el ORM del usuario que esta decisión exige como defensa en
+> profundidad (ver **Decisión**) está implementada y probada, no solo prevista.
+> El otro supuesto inferido en la misma sesión (`Link.unlink()`) corrió peor
+> suerte y quedó anotado en doc 15 §2.2: el `MissingError` existe y el camino
+> de un usuario portal lo pisa en **cada** borrado de un link con sombra. Nada
+> de eso toca a este ADR, pero sí deja una advertencia que le aplica, y fuerte:
+> ese supuesto se caracterizó **mal dos veces** antes de cerrar, las dos por
+> probar un camino y hablar de todos — primero un solo borrado, después cuatro
+> casos pero todos con el ORM del admin, que por ser superusuario no dispara la
+> comprobación que falla. Cuando esta regla se re-verifique (por ejemplo si aparece otro modelo
+> con copias en Sprint 4), vale la pena enumerar **qué** escenarios se
+> probaron, como hace la lista de arriba, y no solo el veredicto.
 
 **Alternativas consideradas.**
 
@@ -856,7 +900,12 @@ por un admin queda invisible para los usuarios portal involucrados, y su
 crearla es una acción deliberada de administración. Segunda consecuencia: hay
 que probar explícitamente, con **dos** usuarios portal, que la víctima
 conserva la escritura sobre su link después de un intento cruzado; es CA de B6
-y no se puede dar por cerrada la tarea sin ella.
+y no se puede dar por cerrada la tarea sin ella — **hecho el 2026-09-21**, ver
+el estado de verificación de arriba. Tercera consecuencia, que la prueba
+agregó: el AND es también la última línea de defensa si el controlador de B6
+se escribe mal, así que el orden en que se hicieron las cosas (regla primero,
+endpoint después) es el correcto y conviene mantenerlo si aparece otra regla
+de aislamiento en Sprint 4.
 
 ---
 

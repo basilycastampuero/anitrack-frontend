@@ -58,3 +58,10 @@ export const listEntrySchema: z.ZodType<ListEntry> = z.lazy(() =>
     finishedAt: z.string().nullable().optional(),
   }),
 )
+
+/** Payload del `409 ALREADY_LINKED` (doc 04): dónde está ya cada aparición. */
+export const existingLinkSchema = z.object({
+  entry: listEntrySchema,
+  checklistId: z.number(),
+  checklistName: z.string(),
+})

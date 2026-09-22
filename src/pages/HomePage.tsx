@@ -8,7 +8,7 @@ import { ErrorState } from '@/components/common/ErrorState'
 import { LoadingSkeleton } from '@/components/common/LoadingSkeleton'
 import { FranchiseCarousel } from '@/features/catalog/components/FranchiseCarousel'
 import { useFranchiseList } from '@/features/catalog/hooks/useFranchiseList'
-import { useLibraryIndex } from '@/features/lists/hooks/useLibraryIndex'
+import { useInLibrary } from '@/features/lists/hooks/useInLibrary'
 import type { FranchiseSummary } from '@/features/catalog/types'
 import { paths } from '@/router/paths'
 import { t } from '@/i18n/en'
@@ -42,7 +42,8 @@ function Hero() {
 
 /** Agrupa por género para las filas temáticas (doc 06: 2–3 filas por género). */
 function byGenre(items: FranchiseSummary[]) {
-  const rows: { genreId: number; name: string; items: FranchiseSummary[] }[] = []
+  const rows: { genreId: number; name: string; items: FranchiseSummary[] }[] =
+    []
   const seen = new Set<number>()
   for (const franchise of items) {
     for (const genre of franchise.genres) {
@@ -62,12 +63,7 @@ function byGenre(items: FranchiseSummary[]) {
 
 export default function HomePage() {
   const franchises = useFranchiseList({})
-  const library = useLibraryIndex()
-
-  const libraryFranchiseSet = useMemo(
-    () => new Set(library.data?.franchiseIds ?? []),
-    [library.data],
-  )
+  const library = useInLibrary()
 
   const recentlyAdded = useMemo(() => {
     const items = franchises.data?.items ?? []
@@ -117,14 +113,14 @@ export default function HomePage() {
       <FranchiseCarousel
         title={t.home.recentlyAdded}
         items={recentlyAdded}
-        libraryFranchiseSet={libraryFranchiseSet}
+        isInLibrary={library.hasFranchise}
       />
       {genreRows.map((row) => (
         <FranchiseCarousel
           key={row.genreId}
           title={row.name}
           items={row.items}
-          libraryFranchiseSet={libraryFranchiseSet}
+          isInLibrary={library.hasFranchise}
         />
       ))}
     </PageWrapper>

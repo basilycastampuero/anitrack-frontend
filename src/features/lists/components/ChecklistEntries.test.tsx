@@ -48,9 +48,16 @@ describe('ChecklistEntries', () => {
       // Suelto: fila directa con su propio progreso, sin trigger de grupo.
       expect(await screen.findByText('Demon Slayer — Season 1')).toBeInTheDocument()
       expect(screen.getByText('12/26')).toBeInTheDocument()
+      // Sin trigger colapsable propio: el nombre del entry no es un botón.
+      // Se compara el nombre EXACTO porque desde 3.7 la fila sí tiene botones
+      // —los del stepper—, y sus `aria-label` mencionan el título.
       expect(
-        screen.queryByRole('button', { name: /Demon Slayer/ }),
+        screen.queryByRole('button', { name: 'Demon Slayer — Season 1' }),
       ).not.toBeInTheDocument()
+      // 3.7: la fila editable trae el stepper de episodios.
+      expect(
+        screen.getByRole('button', { name: 'One episode more of Demon Slayer — Season 1' }),
+      ).toBeInTheDocument()
 
       // Agrupado: header colapsable con el string de progreso agregado y sus hijos.
       expect(screen.getByRole('button', { name: /Spy x Family/ })).toBeInTheDocument()

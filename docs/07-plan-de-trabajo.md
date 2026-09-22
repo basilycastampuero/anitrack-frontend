@@ -78,7 +78,8 @@ El Sprint 3 original tenía 11 tareas, y las más pesadas del proyecto (auth,
 árbol accesible, optimistic updates, wizard de 3 caminos). Se parte en **3a** y
 **3b**, cada uno con su propio objetivo demo. **La numeración 3.1–3.11 se
 conserva** para que las referencias cruzadas de los otros docs sigan siendo
-válidas.
+válidas; 3.12 y 3.13 se agregaron el 2026-09-21 al replanificar el 3b, sin
+tocar las anteriores.
 
 El corte está donde la app cambia de naturaleza: al terminar 3a existe sesión y
 listas navegables (un CRUD); en 3b aparece el tracking, que es el valor real
@@ -179,18 +180,59 @@ POST/PATCH/DELETE; ACL vs. reglas de registro en un ORM (`ir.model.access` vs.
 **Objetivo demo:** vincular una versión desde el catálogo, subir progreso con
 optimistic update, ver el perfil público con stats.
 
+> 🟡 **Carril A en 7/8** (2026-09-21): 3.12, 3.7, 3.8, 3.9, 3.10, 3.13 y 3.11
+> completos — objetivo demo cumplible. Falta solo **3.3b** (OAuth Twitch
+> end-to-end, ⚪ recortable), que depende de B9. **El carril B (backend en
+> `ll-odoo`, B6–B10) todavía no arrancó.** El sprint no está cerrado — detalle
+> completo, decisiones tomadas sobre la marcha y hallazgos en
+> [16-sprint3b-avance.md](./16-sprint3b-avance.md).
+
 | # | Tarea | Detalle | CA | Prioridad |
 |---|---|---|---|---|
+| 3.12 | ⚠️ El mock de `/me/links` ejecuta el modelo | Los tres handlers mantienen los invariantes del modelo en vez de ser un stub: agrupación por franquicia, propagación a copias sincronizadas, borrado del padre huérfano, y `linkCount`/`stats` **derivados** del seed en vez de escritos a mano (ADR-022) | Un test por invariante que **fuerce al mock a trabajar**: crear en una sub-carpeta anidada sube su `linkCount`; dos links de la misma franquicia agrupados dan **un** padre con dos hijos; patchear un link sincronizado mueve el otro; borrar el último hijo borra el padre; una lista privada anidada por la ruta pública da `404` | 🔴 núcleo |
 | 3.7 | `EpisodeStepper` optimistic | Patrón onMutate/rollback; también en card de detalle | Corte de red simulado → rollback + toast | 🔴 núcleo |
 | 3.8 | `LinkWizard` | Flujo completo del doc 06 incl. ALREADY_LINKED y synced copy | Los 3 caminos demostrables | 🔴 núcleo |
-| 3.9 | `library-index` en catálogo | Cards muestran "in your list" | Se actualiza al agregar/quitar | 🟡 importante |
-| 3.10 | Perfil público + stats | StatsGrid client-side v1 | Perfil vacío (EmptyState) y poblado | 🟡 importante |
-| 3.11 | RatingStars + notas [flag] | ADR-004; visible solo con flag | Flag off ⇒ ni rastro en la UI | ⚪ recortable |
+| 3.9 | `library-index` en catálogo | La mitad de franquicia ya está; falta la de **versión** (`VersionsTable` con `AddToListButton`) vía `useInLibrary()` | Las cards muestran "in your list" y se actualiza al agregar/quitar, verificado de punta a punta (catálogo → wizard → badge, sin recargar) | 🟡 importante |
+| 3.10 | Perfil público + stats | `StatsGrid` con las stats **que devuelve el endpoint**, no calculadas en el cliente (§4.5 del doc 15) | Perfil vacío (EmptyState) y poblado; una lista privada no mueve las stats | 🟡 importante |
+| 3.11 | RatingStars [flag] + notas | ADR-004: el flag gatea **estrellas y fechas**; las notas no (§4.6 del doc 15) | Flag off ⇒ ni rastro de estrellas en la UI, y el `PATCH` tampoco manda `rating` | ⚪ recortable (las notas, no) |
+| 3.13 | Cierre de la deuda #6 | `CosmeticChecklistPatch` cierra el camino optimista de `useUpdateChecklist` (no negociable) + el mock honra `parentId`/`order` (recortable) | Llamar a `useUpdateChecklist` con `parentId` **no compila**; el mock mueve un nodo entre padres y `GET /me/checklists` lo devuelve en su lugar nuevo, con los hermanos reordenados | 🟡 importante |
 | 3.3b | ⚠️ OAuth Twitch end-to-end | Registrar una app de Twitch propia, crear el `auth.oauth.provider` en el Odoo local, verificar en qué grupo cae el usuario que crea `_auth_oauth_signin` (ADR-015 espera Portal) | Login por Twitch real contra el Odoo local, de punta a punta | ⚪ recortable |
 
 3.7 y 3.8 son el producto: sin ellos AniTrack es un catálogo con listas vacías.
-Si el sprint se desborda, lo que se recorta es 3.11 primero y 3.10 después
-(el perfil puede quedar en v1 mínimo sin StatsGrid).
+Si el sprint se desborda, el orden de recorte es 3.3b, después 3.11 (menos las
+notas), después 3.10, después la mitad cara de 3.13 y el long-press de 3.7.
+**3.12, 3.7 y 3.8 no se tocan.**
+
+> **Replanificado el 2026-09-21** tras el diseño técnico del sprint
+> ([15-diseno-sprint3b.md](./15-diseno-sprint3b.md), **ADR-020 a ADR-022**). El
+> *qué* del sprint no cambió. Se agregan dos tareas que el diseño encontró, y
+> se corrigen tres afirmaciones de esta tabla que el código ya desmiente:
+>
+> - **3.12 es nueva y va primero** (por eso encabeza la tabla pese a su
+>   número). El mock de `/me/links` es un stub que no mantiene un solo
+>   invariante del modelo, así que las CA de 3.7, 3.8, 3.9 y 3.10 se
+>   verificarían en falso sobre él. Es el mismo patrón que ya hizo pasar cinco
+>   tests en falso en el 3a. No agrega alcance: paga una deuda que igual iba a
+>   consumir tiempo de esas cuatro tareas.
+> - **3.13 es nueva.** Cierra la deuda #6 (`patchChecklistNode` acepta
+>   `parentId`/`order` y no mueve nada), que quedó abierta del 3a.
+> - **3.9 no está sin empezar, está a medias.** `FranchiseCard` ya recibe
+>   `inLibrary` y las tres páginas ya le pasan el índice (verificado). Lo que
+>   falta es la mitad de **versión** (`VersionsTable`) y la mitad de **"se
+>   actualiza"**, que es el test de punta a punta.
+> - **Las stats de 3.10 las calcula el backend, no el cliente.** "StatsGrid
+>   client-side v1" era de cuando no había backend propio; hoy lo hay, y
+>   agregar en el navegador sería N+1 requests para pintar tres números
+>   (§4.5 del doc 15). Además cuentan **solo** links en listas publicadas, o
+>   filtrarían el tamaño de las privadas.
+> - **Las notas de 3.11 no son un campo `[EXT]`.** `notes` mapea a
+>   `link_description`, que existe en el modelo de Chano, es escribible y ya lo
+>   emite el endpoint de entries. Los `[EXT]` de ADR-004 son `rating`,
+>   `startedAt` y `finishedAt`. Consecuencia: si 3.11 se recorta, las notas
+>   igual entran — son lo único de las tres que funciona contra el backend real.
+>
+> El carril B del sprint (B6–B10) vive en §6.3 del doc 15, con el mismo
+> criterio que B1–B5 en el 3a: no se numera acá para no romper 3.1–3.13.
 
 **Conceptos:** optimistic updates en profundidad (onMutate / onError / rollback
 / onSettled); por qué el rollback es la parte que hay que testear, no el happy

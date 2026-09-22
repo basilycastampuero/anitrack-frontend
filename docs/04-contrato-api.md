@@ -330,12 +330,33 @@ interface CreateLinkRequest {
   groupUnderFranchise: boolean;   // crear/agregar a franchise-link
   franchiseDisplayNameId?: number; // requerido si se crea el franchise-link
   syncWithLinkId?: number;        // modo "copia sincronizada"
+  force?: boolean;                // saltea la detección de duplicado (ver 409)
 }
 ```
 → `201 { entry: ListEntry }`.
-`409 { error: { code: "ALREADY_LINKED", existing: ListEntry[] } }` si la versión
-ya está vinculada (la UI ofrece "agregar de todas formas" reintentando con
-`force: true`, o "crear copia sincronizada").
+`409 ALREADY_LINKED` si la versión ya está vinculada. El payload lleva **en qué
+lista** está cada aparición: un `ListEntry` solo no lo dice, y sin ese dato la
+elección del usuario ("agregar de todas formas" reintentando con `force: true`,
+"crear copia sincronizada" o cancelar) se toma a ciegas — necesita leer "ya está
+en *Watching*".
+
+```ts
+{
+  error: {
+    code: "ALREADY_LINKED";
+    message: string;
+    existing: {
+      entry: ListEntry;
+      checklistId: number;
+      checklistName: string;
+    }[];
+  }
+}
+```
+
+La búsqueda recorre **todas** las carpetas del usuario, incluidas las anidadas,
+y nunca sale del alcance de su propia `ir.rule`: un `409` no puede filtrar el
+nombre de una lista de otro usuario.
 
 ### `PATCH /api/v1/me/links/:id`
 Body parcial: `{ watchedEpisodes?, displayName?, abbreviation?, order?, notes?, showProgress?, rating? [EXT], startedAt? [EXT], finishedAt? [EXT] }`
@@ -363,7 +384,7 @@ interface PublicProfile {
   id: number;
   name: string;
   avatarUrl: string | null;
-  stats: {                        // calculados por backend (o client-side v1)
+  stats: {                        // calculadas por el backend, NO client-side
     totalEntries: number;
     totalEpisodesWatched: number;
     byContentType: { games: number; videos: number };
@@ -372,8 +393,22 @@ interface PublicProfile {
 }
 ```
 
+Las stats cuentan **únicamente los links que viven en checklists publicadas**.
+Contar todo filtraría el tamaño de las listas privadas del usuario en un
+endpoint público.
+
+`publishedChecklists` es un **bosque de subárboles publicados**, no un filtro de
+nivel raíz: `isPublished` es un campo por registro y no se hereda, así que una
+sub-carpeta publicada bajo una carpeta privada es pública por sí misma. Cada
+nodo publicado sin ancestro publicado va como raíz, y sus `children` se podan a
+los publicados.
+
 ### `GET /api/v1/users/:id/checklists/:checklistId/entries`
-Igual que `me/.../entries` pero solo si `isPublished`. `403` si no.
+Igual que `me/.../entries` pero solo si `isPublished`. Si no lo está → **`404`,
+no `403`**: un `403` confirma que el id existe, y acá eso importa más que en el
+resto de la API privada porque un id de checklist privada es adivinable a partir
+de los ids públicos vecinos. La búsqueda de la checklist es **recursiva**: una
+lista privada anidada bajo una publicada también da `404`.
 
 ---
 

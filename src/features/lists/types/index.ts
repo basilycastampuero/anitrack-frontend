@@ -1,3 +1,4 @@
+import { ApiError } from '@/types/api.types'
 import type { ContentType } from '@/types/media.types'
 
 /** Carpeta de checklist del usuario (doc 04). Árbol recursivo. */
@@ -85,6 +86,29 @@ export interface UpdateLinkRequest {
   finishedAt?: string | null // [EXT]
 }
 
+/**
+ * El subconjunto de `UpdateChecklistRequest` que el camino **optimista** puede
+ * aplicar sin mentir (deuda #6, doc 15 §4.1).
+ *
+ * Renombrar, describir, publicar y cambiar el orden de armado son ediciones
+ * de un nodo que ya está en cache: el cliente sabe exactamente cómo va a
+ * quedar el árbol y puede escribirlo al instante. `parentId` y `order`, en
+ * cambio, son **estructurales**: mueven el nodo entre padres y reordenan
+ * hermanos, y `patchChecklistNode` no hace nada de eso — los aceptaba y los
+ * ignoraba en silencio, que es un falso verde armado esperando a 4.10.
+ *
+ * Acotarlo por tipo convierte esa convención en un error de compilación: quien
+ * construya mover/reordenar no puede pasar por acá, tiene que escribir el hook
+ * estructural (sin optimistic, misma regla que crear/borrar en el 3a) o
+ * ampliar el helper a conciencia. El transporte no cambia: el service sigue
+ * aceptando el `UpdateChecklistRequest` completo, y el backend real ya soporta
+ * ambos campos con detección de ciclos.
+ */
+export type CosmeticChecklistPatch = Pick<
+  UpdateChecklistRequest,
+  'name' | 'description' | 'isPublished' | 'sortingMode'
+>
+
 /** Derivado en el cliente para la UI de progreso (doc 05). */
 export interface Progress {
   watched: number
@@ -105,8 +129,46 @@ export interface LibraryIndex {
  * evita `!`/`as` en los componentes de solo lectura (`ListEntryRow`,
  * `ChecklistEntries`) al elegir entre fila suelta y grupo de franquicia.
  */
-export function isVersionEntry(
-  entry: ListEntry,
-): entry is ListEntry & { kind: 'version'; version: NonNullable<ListEntry['version']> } {
+export function isVersionEntry(entry: ListEntry): entry is VersionEntry {
   return entry.kind === 'version' && entry.version != null
+}
+
+/** Un `ListEntry` ya narrowado por `isVersionEntry`: `version` está garantizado. */
+export type VersionEntry = ListEntry & {
+  kind: 'version'
+  version: NonNullable<ListEntry['version']>
+}
+
+/** Una aparición previa de la versión, con la lista donde vive (doc 04, `409`). */
+export interface ExistingLink {
+  entry: ListEntry
+  checklistId: number
+  checklistName: string
+}
+
+/**
+ * `409 ALREADY_LINKED` ya parseado (doc 15 §3.3). `ApiError.detail` es
+ * `unknown` a propósito, y este es el único error del contrato cuyo payload
+ * alimenta una decisión del usuario — así que se valida donde se valida todo
+ * lo demás, en el service con Zod, y el componente nunca hace `as` sobre
+ * `detail`.
+ *
+ * Si el payload no valida, el service deja pasar el `ApiError` crudo: el
+ * wizard cae igual al paso de conflicto, sin la lista de apariciones, y
+ * ofrece solo "agregar igual / cancelar". Degrada, no rompe.
+ */
+export class AlreadyLinkedError extends ApiError {
+  readonly existing: ExistingLink[]
+
+  constructor(source: ApiError, existing: ExistingLink[]) {
+    super(
+      source.code,
+      source.message,
+      source.status,
+      source.detail,
+      source.field,
+    )
+    this.name = 'AlreadyLinkedError'
+    this.existing = existing
+  }
 }

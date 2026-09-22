@@ -1,4 +1,7 @@
-import type { ChecklistNode, UpdateChecklistRequest } from '@/features/lists/types'
+import type {
+  ChecklistNode,
+  CosmeticChecklistPatch,
+} from '@/features/lists/types'
 
 /** Cuánto se lleva puesto borrar `node` (doc 12 §3.5b): sus sub-carpetas
  * descendientes (sin contarse a sí mismo) y el total de entries — el propio
@@ -36,11 +39,15 @@ export function countDescendants(node: ChecklistNode): {
  * Si `id` no aparece en el árbol, devuelve el árbol de entrada sin tocar
  * (no debería pasar en uso normal: el nodo tiene que existir en cache para
  * que la UI lo esté editando).
+ *
+ * El patch es `CosmeticChecklistPatch` y no el request completo a propósito
+ * (deuda #6): esta función NO mueve ni reordena nada, así que aceptar
+ * `parentId`/`order` sería prometer algo que no cumple.
  */
 export function patchChecklistNode(
   tree: ChecklistNode[],
   id: number,
-  patch: UpdateChecklistRequest,
+  patch: CosmeticChecklistPatch,
 ): ChecklistNode[] {
   let changed = false
 

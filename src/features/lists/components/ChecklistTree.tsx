@@ -16,6 +16,13 @@ interface ChecklistTreeProps {
    * decide cómo la lee (`null` = nada seleccionado todavía). */
   selectedId: number | null
   onSelect: (id: number) => void
+  /**
+   * Modo selección (lo usa el `LinkWizard`): sin cabecera, sin botón de crear
+   * y sin menú por nodo. El árbol es el mismo —no se duplica— pero adentro de
+   * un diálogo esas tres cosas son ruido, y el dialog de crear anidado en otro
+   * dialog pelea por el foco.
+   */
+  compact?: boolean
   className?: string
 }
 
@@ -27,7 +34,12 @@ interface ChecklistTreeProps {
  * `useTreeNavigation`, este componente solo arma el árbol y cablea los
  * cuatro estados de datos.
  */
-export function ChecklistTree({ selectedId, onSelect, className }: ChecklistTreeProps) {
+export function ChecklistTree({
+  selectedId,
+  onSelect,
+  compact = false,
+  className,
+}: ChecklistTreeProps) {
   const checklists = useChecklists()
   const tree = checklists.data ?? []
   const nav = useTreeNavigation({ tree, selectedId, onSelect })
@@ -61,16 +73,21 @@ export function ChecklistTree({ selectedId, onSelect, className }: ChecklistTree
             onToggleExpand={nav.toggleExpand}
             onSelect={nav.selectNode}
             onKeyDown={nav.handleKeyDown}
+            compact={compact}
           />
         ))}
       </ul>
     )
   }
 
+  if (compact) return <div className={className}>{body}</div>
+
   return (
     <div className={className}>
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-muted-foreground">{t.lists.treeLabel}</h2>
+        <h2 className="text-sm font-semibold text-muted-foreground">
+          {t.lists.treeLabel}
+        </h2>
         <Button
           variant="ghost"
           size="icon-sm"

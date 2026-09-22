@@ -1,6 +1,30 @@
 import type { UserSession } from '@/features/auth/types'
-import type { ChecklistNode, ListEntry, LibraryIndex } from '@/features/lists/types'
-import type { PublicProfile } from '@/features/profile/types'
+import type { ListEntry } from '@/features/lists/types'
+
+/**
+ * El árbol tal como lo declara el seed: igual a `ChecklistNode` del contrato
+ * pero **sin** el contador de links, porque ese número lo deriva
+ * `toChecklistTree` a partir de los entries reales (ADR-022). Escribirlo a
+ * mano acá era un mock que mentía: se podía crear un link y ver el contador
+ * quieto.
+ */
+export interface SeedChecklistNode {
+  id: number
+  name: string
+  description: string | null
+  imageUrl: string | null
+  order: number
+  sortingMode: 'C' | 'N'
+  isPublished: boolean
+  children: SeedChecklistNode[]
+}
+
+/** Perfil tal como lo declara el seed: las stats y el bosque publicado se derivan. */
+export interface SeedProfile {
+  id: number
+  name: string
+  avatarUrl: string | null
+}
 
 export const users: UserSession[] = [
   {
@@ -31,7 +55,7 @@ export const mockCredentials: Record<string, string> = {
 }
 
 /** Árbol de checklists por usuario (solo carpetas del usuario, doc 04). */
-export const checklistsByUser: Record<number, ChecklistNode[]> = {
+export const checklistsByUser: Record<number, SeedChecklistNode[]> = {
   1: [
     {
       id: 1,
@@ -41,7 +65,6 @@ export const checklistsByUser: Record<number, ChecklistNode[]> = {
       order: 0,
       sortingMode: 'N',
       isPublished: true,
-      linkCount: 2,
       children: [],
     },
     {
@@ -52,7 +75,6 @@ export const checklistsByUser: Record<number, ChecklistNode[]> = {
       order: 1,
       sortingMode: 'N',
       isPublished: true,
-      linkCount: 1,
       children: [],
     },
     {
@@ -63,7 +85,6 @@ export const checklistsByUser: Record<number, ChecklistNode[]> = {
       order: 2,
       sortingMode: 'C',
       isPublished: false,
-      linkCount: 0,
       children: [
         {
           id: 4,
@@ -73,7 +94,6 @@ export const checklistsByUser: Record<number, ChecklistNode[]> = {
           order: 0,
           sortingMode: 'C',
           isPublished: false,
-          linkCount: 1,
           children: [
             {
               id: 5,
@@ -83,7 +103,6 @@ export const checklistsByUser: Record<number, ChecklistNode[]> = {
               order: 1,
               sortingMode: 'C',
               isPublished: false,
-              linkCount: 0,
               children: [
                 {
                   id: 6,
@@ -93,7 +112,6 @@ export const checklistsByUser: Record<number, ChecklistNode[]> = {
                   order: 0,
                   sortingMode: 'C',
                   isPublished: false,
-                  linkCount: 1,
                   children: [],
                 },
               ],
@@ -208,6 +226,34 @@ export const entriesByChecklist: Record<number, ListEntry[]> = {
       startedAt: '2023-12-01',
       finishedAt: '2023-12-01',
     },
+    /**
+     * Copia sincronizada de "Steins;Gate" (link 5006, carpeta "2010s"): el
+     * mismo `versionId` vinculado en dos carpetas, con `isSynced` en ambas.
+     * En Odoo esto es una fila de `ll.checklist.link.copy` y `Link.write`
+     * propaga `lv_episodes` entre las dos; acá el par se reconoce por
+     * `isSynced && versionId` (ver `syncedSiblings` en handlers).
+     *
+     * El seed no tenía ningún par sincronizado, así que la propagación —que
+     * es el invariante más caro del modelo— no se podía ni ejercer.
+     */
+    {
+      linkId: 5007,
+      kind: 'version',
+      displayName: 'Steins;Gate',
+      imageUrl: '/mock-images/poster-7.svg',
+      order: 1,
+      contentType: 'V',
+      franchiseId: 9,
+      notes: null,
+      version: {
+        versionId: 1016,
+        contentId: 112,
+        abbreviation: 'SG',
+        watchedEpisodes: 24,
+        totalEpisodes: 24,
+        isSynced: true,
+      },
+    },
   ],
   4: [
     {
@@ -254,7 +300,7 @@ export const entriesByChecklist: Record<number, ListEntry[]> = {
         abbreviation: 'SG',
         watchedEpisodes: 24,
         totalEpisodes: 24,
-        isSynced: false,
+        isSynced: true,
       },
       rating: 9,
       startedAt: '2023-02-01',
@@ -263,37 +309,23 @@ export const entriesByChecklist: Record<number, ListEntry[]> = {
   ],
 }
 
-export const libraryIndexByUser: Record<number, LibraryIndex> = {
-  1: {
-    versionIds: [1005, 1017, 1018, 1010, 1000, 1016],
-    franchiseIds: [3, 10, 5, 1, 9],
-  },
-  2: { versionIds: [], franchiseIds: [] },
-}
-
-/** Perfiles públicos (stats calculados a mano para el seed). */
-export const profilesByUser: Record<number, PublicProfile> = {
+/**
+ * Identidad pública de cada usuario. Las stats y el bosque de listas
+ * publicadas **no** viven acá: los deriva el handler de `/users/:id/profile`
+ * con `computeStats` y `publishedForest`. Los valores que estaban escritos a
+ * mano (128 episodios, 5 entries) no se correspondían con ningún entry real
+ * del seed.
+ */
+export const profilesByUser: Record<number, SeedProfile> = {
   1: {
     id: 1,
     name: 'Alex Rivera',
     avatarUrl: '/mock-images/avatar-1.svg',
-    stats: {
-      totalEntries: 5,
-      totalEpisodesWatched: 128,
-      byContentType: { games: 0, videos: 5 },
-    },
-    publishedChecklists: checklistsByUser[1]!.filter((c) => c.isPublished),
   },
   2: {
     id: 2,
     name: 'Sam Cortez',
     avatarUrl: null,
-    stats: {
-      totalEntries: 0,
-      totalEpisodesWatched: 0,
-      byContentType: { games: 0, videos: 0 },
-    },
-    publishedChecklists: [],
   },
 }
 
@@ -317,7 +349,6 @@ const initialSeedSnapshot = structuredClone({
   mockCredentials,
   checklistsByUser,
   entriesByChecklist,
-  libraryIndexByUser,
   profilesByUser,
 })
 
@@ -364,6 +395,5 @@ export function resetListsSeed(): void {
   replaceRecordInPlace(mockCredentials, fresh.mockCredentials)
   replaceRecordInPlace(checklistsByUser, fresh.checklistsByUser)
   replaceRecordInPlace(entriesByChecklist, fresh.entriesByChecklist)
-  replaceRecordInPlace(libraryIndexByUser, fresh.libraryIndexByUser)
   replaceRecordInPlace(profilesByUser, fresh.profilesByUser)
 }
