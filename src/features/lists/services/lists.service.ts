@@ -17,12 +17,19 @@ import type {
   UpdateLinkRequest,
 } from '@/features/lists/types'
 
-const libraryIndexSchema = z.object({
+/**
+ * Exportados (deuda de B5, doc 13): el checkpoint de contrato de B10 corre
+ * los schemas del frontend contra el backend real desde afuera de este
+ * archivo y necesita reconstruirlos, no duplicarlos a mano.
+ */
+export const libraryIndexSchema = z.object({
   versionIds: z.array(z.number()),
   franchiseIds: z.array(z.number()),
 })
 
-const checklistResponseSchema = z.object({ checklist: checklistNodeSchema })
+export const checklistResponseSchema = z.object({
+  checklist: checklistNodeSchema,
+})
 const entryResponseSchema = z.object({ entry: listEntrySchema })
 
 /**
