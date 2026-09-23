@@ -63,15 +63,24 @@ export function useTreeNavigation({ tree, selectedId, onSelect }: UseTreeNavigat
   // mientras tanto, el ítem con tabIndex=0 se deriva de `selectedId` más abajo.
   const [explicitFocusId, setExplicitFocusId] = useState<number | null>(null)
   const itemRefs = useRef(new Map<number, HTMLLIElement>())
-  const didAutoExpand = useRef(false)
+  // Para qué `selectedId` ya se expandieron los ancestros. Antes era un
+  // booleano de "una sola vez en la vida", que se marcaba incluso cuando el
+  // nodo seleccionado no tenía ancestros que expandir: a partir de ahí, una
+  // selección posterior a una carpeta anidada colapsada (back/forward del
+  // navegador, sin remontar la página) ya no se revelaba — justo lo que este
+  // efecto existe para evitar.
+  const autoExpandedFor = useRef<number | null>(null)
 
   // Revela el nodo seleccionado por URL expandiendo sus ancestros, una sola
   // vez cuando el árbol llega: si no, un refresh sobre una lista anidada dentro
   // de una carpeta colapsada no muestra la selección en el árbol aunque el
   // panel de entries sí tenga los datos correctos.
   useEffect(() => {
-    if (didAutoExpand.current || tree.length === 0 || selectedId == null) return
-    didAutoExpand.current = true
+    if (tree.length === 0 || selectedId == null) return
+    // Solo una vez POR nodo seleccionado: así no se pelea con el usuario que
+    // colapsa a mano la carpeta que acaba de revelarse.
+    if (autoExpandedFor.current === selectedId) return
+    autoExpandedFor.current = selectedId
     const ancestors = findAncestorPath(tree, selectedId)
     if (ancestors && ancestors.length > 0) {
       setExpanded((prev) => new Set([...prev, ...ancestors]))
@@ -189,5 +198,51 @@ export function useTreeNavigation({ tree, selectedId, onSelect }: UseTreeNavigat
     [visible, expanded, toggleExpand, moveFocusTo, selectNode],
   )
 
-  return { visible, focusedId, isExpanded, toggleExpand, registerItemRef, selectNode, handleKeyDown }
+  /**
+   * Lleva el foco de DOM al ítem que hoy tiene el roving tabindex. Lo usa el
+   * nodo cuyo `<li>` desapareció mientras su diálogo estaba abierto —al
+   * borrarlo— para no dejar el foco en el `<body>`: `focusedId` ya cayó al
+   * vecino que corresponde, solo falta moverlo de verdad.
+   */
+  const focusCurrent = useCallback(() => {
+    if (focusedId == null) return
+    itemRefs.current.get(focusedId)?.focus()
+  }, [focusedId])
+
+  /**
+   * Recupera el foco cuando el nodo que lo tenía desaparece del árbol.
+   *
+   * La versión anterior de este arreglo se colgaba del cierre del diálogo de
+   * borrado, y no servía: `useDeleteChecklist` invalida sin esperar el refetch
+   * (`void invalidateQueries`), así que `mutateAsync` resuelve, el diálogo
+   * cierra y en ese instante el `<li>` TODAVÍA está montado. Recién después
+   * llega el refetch, lo saca del DOM y deja el foco en el `<body>` — cuando
+   * ya no queda ningún evento al que engancharse. La recuperación tiene que
+   * atarse al cambio de DATOS, no a una sincronía entre el diálogo y React
+   * Query que no existe.
+   */
+  const lastFocusedRef = useRef<number | null>(null)
+  useEffect(() => {
+    const previous = lastFocusedRef.current
+    lastFocusedRef.current = focusedId
+    if (previous == null || previous === focusedId) return
+    // Sigue en el árbol: esto es navegación normal, no una desaparición.
+    if (visible.some((item) => item.node.id === previous)) return
+    // Solo si el foco se perdió de verdad. Si el usuario ya está en otro
+    // control, robárselo sería peor que el problema que esto arregla.
+    const active = document.activeElement
+    if (active && active !== document.body && active.isConnected) return
+    focusCurrent()
+  }, [visible, focusedId, focusCurrent])
+
+  return {
+    visible,
+    focusedId,
+    isExpanded,
+    toggleExpand,
+    registerItemRef,
+    selectNode,
+    handleKeyDown,
+    focusCurrent,
+  }
 }

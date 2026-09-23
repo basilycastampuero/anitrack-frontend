@@ -460,10 +460,17 @@ export const handlers = [
   http.get(url('/me/checklists/:id/entries'), async ({ request, params }) => {
     const err = await simulate(request)
     if (err) return err
-    if (!requireUser()) return errorResponse('UNAUTHORIZED', 'Login required')
-    return HttpResponse.json({
-      items: entriesByChecklist[Number(params.id)] ?? [],
-    })
+    const uid = requireUser()
+    if (!uid) return errorResponse('UNAUTHORIZED', 'Login required')
+    // Antes devolvía `entriesByChecklist[id]` sin preguntar de quién era la
+    // carpeta ni si existía, mientras el backend real sí valida y responde
+    // `404` (`_owned_folder_or_none` en `api_lists.py`). Esa divergencia
+    // escondía un bug real: borrar la carpeta que estabas viendo se veía como
+    // una lista vacía contra MSW y como un error permanente contra el backend.
+    // El mock se alinea al backend, no al revés.
+    const folder = findChecklist(userTree(uid), Number(params.id))
+    if (!folder) return errorResponse('NOT_FOUND', 'Checklist not found')
+    return HttpResponse.json({ items: entriesByChecklist[folder.id] ?? [] })
   }),
 
   /**

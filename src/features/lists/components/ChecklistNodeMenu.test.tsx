@@ -21,6 +21,8 @@ import { http, HttpResponse, delay } from 'msw'
 import { server } from '@/mocks/server'
 import { ChecklistTree } from '@/features/lists/components/ChecklistTree'
 import { listsService } from '@/features/lists/services/lists.service'
+import { toChecklistTree } from '@/mocks/derive/lists'
+import { checklistsByUser, entriesByChecklist } from '@/mocks/seed/lists'
 import { useSessionStore } from '@/store/sessionStore'
 import type { UserSession } from '@/features/auth/types'
 
@@ -376,5 +378,72 @@ describe('ChecklistNodeMenu — teclado y accesibilidad', () => {
     await userEvent.setup().click(trigger)
 
     expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('al borrar el nodo con foco, cuando el árbol se asienta el foco recae en un treeitem — no se pierde en el body', async () => {
+    renderTree()
+    // "Watching" (seed, id 1) es el primer nodo raíz: sin interacción previa,
+    // el roving tabindex arranca ahí.
+    const user = await openMenuFor('Watching')
+    await user.click(screen.getByRole('menuitem', { name: 'Delete' }))
+    await screen.findByRole('dialog')
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+
+    // Ojo con el timing: `useDeleteChecklist` invalida sin esperar el refetch
+    // (`void invalidateQueries`), así que el diálogo cierra con "Watching"
+    // TODAVÍA montado — el foco recién se pierde después, cuando el refetch
+    // invalidado lo saca del árbol. El assert tiene que esperar a que el
+    // árbol se haya asentado, no a que cierre el diálogo.
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('treeitem', { name: 'Watching' }),
+      ).not.toBeInTheDocument(),
+    )
+    await waitFor(() => {
+      expect(document.activeElement).not.toBe(document.body)
+      expect(document.activeElement).toBe(
+        screen.getByRole('treeitem', { name: 'Completed' }),
+      )
+    })
+  })
+
+  it('no le roba el foco a otro control si el usuario ya se movió antes de que el árbol termine de refrescarse', async () => {
+    // Latencia artificial en el refetch del árbol (el resto de handlers
+    // corre a latencia 0 en modo test, ver ADR-008/`IS_TEST`): abre una
+    // ventana real entre "el diálogo ya cerró" y "el árbol ya se asentó",
+    // que es justo donde el usuario puede haberse movido a otro control.
+    server.use(
+      http.get('/api/v1/me/checklists', async () => {
+        await delay(50)
+        return HttpResponse.json({
+          items: toChecklistTree(checklistsByUser[1] ?? [], entriesByChecklist),
+        })
+      }),
+    )
+    renderTree()
+    const user = await openMenuFor('Watching')
+    await user.click(screen.getByRole('menuitem', { name: 'Delete' }))
+    await screen.findByRole('dialog')
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+
+    // El diálogo ya cerró (no tiene latencia propia) pero el árbol sigue
+    // mostrando "Watching": el refetch invalidado todavía tiene 50ms por delante.
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+    )
+    const newListButton = screen.getByRole('button', { name: 'New list' })
+    newListButton.focus()
+    expect(document.activeElement).toBe(newListButton)
+
+    // Ahora sí se asienta el árbol ...
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('treeitem', { name: 'Watching' }),
+      ).not.toBeInTheDocument(),
+    )
+    // ... y el foco se queda donde el usuario lo dejó: la guarda de
+    // `useTreeNavigation` no se lo roba de vuelta al árbol.
+    expect(document.activeElement).toBe(newListButton)
   })
 })
