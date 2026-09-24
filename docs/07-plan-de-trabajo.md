@@ -183,7 +183,8 @@ optimistic update, ver el perfil público con stats.
 > 🟡 **Carril A en 7/8** (2026-09-21): 3.12, 3.7, 3.8, 3.9, 3.10, 3.13 y 3.11
 > completos — objetivo demo cumplible. Falta solo **3.3b** (OAuth Twitch
 > end-to-end, ⚪ recortable), que depende de B9. **El carril B (backend en
-> `ll-odoo`, B6–B10) todavía no arrancó.** El sprint no está cerrado — detalle
+> `ll-odoo`) cerró en **4/5**: B6, B7, B8 y B10 hechas, y solo falta **B9**,
+> diferida junto con 3.3b. El sprint se mergeó a `main` en el PR #4 — detalle
 > completo, decisiones tomadas sobre la marcha y hallazgos en
 > [16-sprint3b-avance.md](./16-sprint3b-avance.md).
 
@@ -240,6 +241,13 @@ path.
 
 ## Sprint 4 — Integración, pulido y deploy (semanas 9–10)
 
+> ✅ **4.13 completa** (2026-09-24): logout accesible desde el header
+> (`DropdownMenu` en el avatar) y desde una `SettingsPage` real (apariencia +
+> cuenta), que reemplaza al `PlaceholderPage` anterior. Cierra la deuda de
+> logout abierta desde el Sprint 3a. Vive en la rama `feat/logout-y-settings`,
+> pendiente de PR contra `main`. Resto del sprint sin empezar salvo **4.1**,
+> en curso. Detalle en [17-sprint4-avance.md](./17-sprint4-avance.md).
+
 | # | Tarea | Detalle | CA |
 |---|---|---|---|
 | 4.1 | ⚠️ Integración backend real | Adaptador en `lib/api/`; apagar MSW por env (`VITE_API_MODE=real\|mock`) | Flujos core contra Odoo real |
@@ -254,6 +262,7 @@ path.
 | 4.10 | (stretch) Drag & drop en árbol/entries | dnd-kit | — |
 | 4.11 | ⚪ `Space` no selecciona en el árbol | `useTreeNavigation.ts` maneja `Enter` pero no `Space`, y el patrón ARIA APG Tree View pide las dos; como el `treeitem` es un `<li>` y no un botón, `Space` tampoco dispara el click nativo. Hallazgo #19 de la revisión post-3b ([13-sprint3a-avance.md](./13-sprint3a-avance.md#actualización-2026-09-22--cierre-de-9-a-14-perdidos-y-revisión-nueva-15-a-20)) | Con el foco en un nodo, `Space` lo selecciona igual que `Enter` |
 | 4.12 | ⚪ `useUpdateChecklist` sin `scope` | Dos renombres del mismo nodo en vuelo pueden hacer que el rollback del primero pise el resultado del segundo; se auto-corrige en el refetch de `onSettled`, así que es un parpadeo y no corrupción. Hallazgo #20 de la misma revisión ([13-sprint3a-avance.md](./13-sprint3a-avance.md#actualización-2026-09-22--cierre-de-9-a-14-perdidos-y-revisión-nueva-15-a-20)) | Mismo patrón que ya tiene `useUpdateEntryProgress` desde el Sprint 3b: `scope: { id: ... }` por nodo |
+| 4.13 | 🔴 Punto de entrada de logout en la UI | `useLogout` está completo y testeado desde 3.1 y **ningún componente lo usa**: no hay forma de cerrar sesión desde la app. Hacen falta dos piezas — `SettingsPage` de verdad (hoy es un `PlaceholderPage`) con las secciones de tema y cuenta que pide el doc 06, y un menú en el avatar del header, que hoy es un `<Link>` pelado al perfil. Sin el menú, el único camino a Settings es el banner del perfil propio. Deuda abierta desde el Sprint 3a | Se puede cerrar sesión desde el header y desde Settings; el cache privado queda vacío y la app redirige fuera de las rutas protegidas |
 
 ## Definition of Done (toda tarea de UI)
 

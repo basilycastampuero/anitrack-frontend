@@ -1,6 +1,14 @@
 import { Link, NavLink } from 'react-router-dom'
 import { Search } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { useSignOut } from '@/features/auth/hooks/useSignOut'
 import { paths } from '@/router/paths'
+import { profilePath } from '@/utils/slug'
 import { cn } from '@/lib/utils'
 import { t } from '@/i18n/en'
 import { ThemeToggle } from '@/components/layout/ThemeToggle'
@@ -18,6 +26,7 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
 /** Header sticky (doc 06). En desktop trae nav y búsqueda; en mobile, compacto. */
 export function Header() {
   const user = useSessionStore((s) => s.user)
+  const { signOut } = useSignOut()
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-sm">
@@ -54,9 +63,32 @@ export function Header() {
           </Link>
           <ThemeToggle />
           {user ? (
-            <Link to={paths.profile.replace(':userId', String(user.id))}>
-              <UserAvatar name={user.name} src={user.avatarUrl} />
-            </Link>
+            // El avatar era un `<Link>` pelado al perfil, así que no había
+            // ninguna forma de cerrar sesión desde la app: `useLogout` existía
+            // y estaba testeado desde 3.1, pero sin puerta (tarea 4.13). El
+            // menú es además el gesto que la gente busca para "mi cuenta".
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={t.auth.account.menu(user.name)}
+                  className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <UserAvatar name={user.name} src={user.avatarUrl} />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem asChild>
+                  <Link to={profilePath(user.id)}>{t.nav.profile}</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to={paths.settings}>{t.nav.settings}</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={signOut}>
+                  {t.auth.account.logout}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : (
             <Link to={paths.login}>
               <Button size="sm">{t.nav.login}</Button>

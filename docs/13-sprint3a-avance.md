@@ -831,10 +831,13 @@ sobre Node 22.
 ### Qué falta (siguiente paso), actualizado
 
 - Deuda restante del sprint: **#6, #9 a #14**, el punto de entrada de logout
-  en la UI, el alcance de la `ir.rule` de ADR-014 a `base.group_portal`, los
-  schemas `libraryIndexSchema`/`checklistResponseSchema` sin exportar, y la
-  falta de verificación con lectores de pantalla reales. Nada de esto se
-  tocó en esta sesión.
+  en la UI **[✅ CERRADO 2026-09-24]** (tarea 4.13: menú en el avatar del
+  header + `SettingsPage` real — ver
+  [17-sprint4-avance.md](./17-sprint4-avance.md)), el alcance de la `ir.rule`
+  de ADR-014 a `base.group_portal`, los schemas
+  `libraryIndexSchema`/`checklistResponseSchema` sin exportar, y la falta de
+  verificación con lectores de pantalla reales. Nada de esto se tocó en esta
+  sesión.
 - Camino crítico sigue siendo **Sprint 3b** (tracking y vinculación, doc 07).
 
 ## Actualización (2026-09-22) — Cierre de #9 a #14 (perdidos) y revisión nueva: #15 a #20
@@ -956,4 +959,4 @@ dentro de `'/my-lists/2'`.
 
 **Nota de estado**: al momento de escribir esta sección, los cambios de
 código y de esta bitácora viven en la rama `fix/revision-arbol-listas`,
-todavía sin commitear.
+todavía sin commitear. **[✅ mergeado a `main` en el PR #5]**
