@@ -245,8 +245,14 @@ path.
 > (`DropdownMenu` en el avatar) y desde una `SettingsPage` real (apariencia +
 > cuenta), que reemplaza al `PlaceholderPage` anterior. Cierra la deuda de
 > logout abierta desde el Sprint 3a. Vive en la rama `feat/logout-y-settings`,
-> pendiente de PR contra `main`. Resto del sprint sin empezar salvo **4.1**,
-> en curso. Detalle en [17-sprint4-avance.md](./17-sprint4-avance.md).
+> pendiente de PR contra `main`. **4.1 en curso, con avance** (2026-09-25):
+> recorrido manual contra el Odoo local real (uso normal, no adversarial) sin
+> encontrar problemas — incluye copias sincronizadas entre listas y
+> sesión/logout funcionando contra el backend real. Quedan sin probar tres
+> escenarios adversariales y una pregunta abierta sobre si la sincronización
+> fue elegida o automática; detalle en
+> [17-sprint4-avance.md](./17-sprint4-avance.md). Resto del sprint sin
+> empezar.
 
 | # | Tarea | Detalle | CA |
 |---|---|---|---|

@@ -105,3 +105,73 @@ escenarios de accesibilidad con lector de pantalla real siguen sin probarse
   del Sprint 3b, siguen diferidas: dependen de que el dueño del proyecto
   registre una app de Twitch, trabajo fuera de código.
 - Resto del Sprint 4 (4.2 a 4.10) sin empezar.
+
+## Actualización (2026-09-25) — Tarea 4.1: recorrido contra el backend real
+
+> Primer avance registrado de la tarea 4.1. El dueño del proyecto recorrió la
+> app en el navegador (rama `feat/logout-y-settings`, dev server propio)
+> contra el Odoo local real, sin MSW. La tarea **sigue en curso**, no se
+> cierra con esta entrada.
+
+### Qué se recorrió y qué funcionó
+
+Reporte del dueño del proyecto, en sustancia:
+
+1. Uso normal de la app contra el backend real: "hasta ahora todo está
+   funcionando normal".
+2. Al agregar una misma serie a distintas listas, las copias quedan
+   enlazadas entre sí contra el backend real — las copias sincronizadas
+   (`isSynced`) funcionan de punta a punta desde la UI.
+3. Las sesiones se mantienen cuando corresponde y se cortan cuando
+   corresponde, incluido el logout nuevo de la tarea 4.13.
+
+Relevancia técnica del punto 2: la `ir.rule` de `ll.checklist.link.copy`
+pasó de OR a AND en ADR-020 (`ll-odoo`, commit `d3be430`) porque el OR
+dejaba crear una fila de copia cruzada hacia el link de otro usuario,
+dejando a la víctima sin poder escribir su propio progreso. El AND cerró
+ese agujero; este recorrido es evidencia de que **no rompió el caso
+legítimo** — copias entre listas del mismo dueño — y de que ese caso ahora
+también se ejercitó desde la UI real, no solo por HTTP directo. La
+verificación original de B7 ("`PATCH` sobre un link sincronizado mueve
+todas sus copias") ya cubría esto, pero por HTTP directo contra el Odoo
+local, no
+a través del flujo de la app (ver
+[`../docs-backend/14-resumen-implementacion-api.md`](../docs-backend/14-resumen-implementacion-api.md)).
+
+### Pregunta abierta (sin resolver)
+
+No se sabe si la sincronización entre listas fue **elegida explícitamente**
+por el dueño del proyecto en el wizard de vinculación, o si **ocurrió
+automáticamente**. Importa porque el doc 04 define la sincronización como
+explícita (`syncWithLinkId` en el request), no automática — si resultó
+automática, sería un hallazgo de comportamiento real, no solo una
+confirmación de lo esperado. Queda anotada como pregunta a confirmar en el
+próximo recorrido, sin resolverla en ninguno de los dos sentidos.
+
+### Qué NO se verificó (uso normal, no adversarial)
+
+- El stepper de episodios clickeado rápido (la carrera del debounce de
+  400 ms contra un round-trip real más lento) — el único defecto conocido
+  que no se puede reproducir contra MSW, porque ahí la latencia simulada
+  del `PATCH` de links es de 150 ms y siempre llega antes del próximo envío.
+- Vincular algo ya vinculado, para ver el `409 ALREADY_LINKED` con el
+  nombre real de la lista devuelto por el backend.
+- Abrir la URL de una lista privada sin sesión (incógnito): debe dar `404`
+  y no `403` — decisión de contrato ya verificada por B8 vía HTTP directo
+  (doc 14), falta confirmarla desde el navegador.
+
+Del logout: se registra tal como lo reportó el dueño del proyecto (la
+sesión se corta al cerrar sesión, contra el backend real). **No** se
+confirmó específicamente la invalidación de la cookie del lado del servidor
+con un F5 posterior al logout — quedó sugerido como paso a seguir, no
+confirmado en esos términos; se deja pendiente, no verificado.
+
+### Qué falta
+
+- 4.1 sigue en curso: este recorrido es evidencia de que los flujos ya
+  construidos (auth, catálogo, listas, links sincronizados) funcionan de
+  punta a punta contra el Odoo real en uso normal, pero no cierra la tarea.
+- Día dedicado a buscar errores (propuesto por el dueño del proyecto, sin
+  fecha fijada): agenda mínima los tres escenarios adversariales de arriba,
+  más la confirmación de la invalidación de cookie post-logout y la
+  pregunta abierta de la sincronización.
