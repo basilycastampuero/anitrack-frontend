@@ -144,6 +144,12 @@ export const en = {
       disabledInMock:
         "Social login isn't available in mock mode — it needs the real backend.",
     },
+    account: {
+      /** `aria-label` del trigger: el avatar no tiene texto propio. */
+      menu: (name: string) => `Account menu for ${name}`,
+      logout: 'Log out',
+      loggingOut: 'Logging out…',
+    },
     callback: {
       loadingTitle: 'Signing you in…',
       errorTitle: 'Sign-in failed',
@@ -278,6 +284,14 @@ export const en = {
       deleteFailed: 'Could not delete the list. Try again.',
       publishFailed: 'Could not update the list. Try again.',
     },
+  },
+  settings: {
+    title: 'Settings',
+    themeTitle: 'Appearance',
+    themeBody: 'Saved in this browser only, not in your account.',
+    accountTitle: 'Account',
+    signedInAs: 'Signed in as',
+    logoutBody: 'You can log back in any time. Your lists stay on the server.',
   },
   profile: {
     statsTitle: 'Stats',

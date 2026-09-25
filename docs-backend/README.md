@@ -16,7 +16,7 @@ porque es documentación de análisis, no decisiones propias del frontend.
 Los números de archivo son los de la numeración original de planificación (ver
 [`../docs/README.md`](../docs/README.md)), no correlativos dentro de esta carpeta.
 
-**Estado (actualizado 2026-09-08):** el bloqueo #1 original dejó de serlo. La
+**Estado (actualizado 2026-09-25):** el bloqueo #1 original dejó de serlo. La
 sección de hosting/deploy la respondió Chano (Railway self-hosted, sin
 staging remoto cómodo, frontend debe correr contra Odoo local); las secciones
 de auth e imágenes se resolvieron leyendo y probando el código de `ll-odoo`
@@ -29,15 +29,35 @@ de `ll-odoo` (sin pushear al remoto de Chano) — el del catálogo (pregunta 1 y
 7 del doc 08, cerrando la tarea 2.8 del plan: no hace falta adaptador, ver
 [`../docs/11-spike-integracion-real.md`](../docs/11-spike-integracion-real.md)),
 el de sesión (`/api/v1/auth/*`, tarea B1, commit `d17d00a`), el de lectura de
-listas (`/me/*`, tarea B3, commit `b708bcb`) y ahora también el de
-**escritura** (tarea B4, commit `3c4e091`, incluye cerrar la fuga de imágenes
-que ADR-014 había dejado como deuda abierta). El **checkpoint de contrato
-(tarea B5)** cerró el carril B completo: encontró y corrigió un drift real —
-`POST /auth/register` con email duplicado filtraba el mensaje crudo de
-Postgres en vez del `422 VALIDATION` + `field: "email"` que pide el contrato
-(fix en commit `b5f30a3`) — cerrando también la última nota `[FE→BE]`
-pendiente de la pregunta 8 de este doc. Ver
+listas (`/me/*`, tarea B3, commit `b708bcb`) y el de **escritura** (tarea B4,
+commit `3c4e091`, incluye cerrar la fuga de imágenes que ADR-014 había dejado
+como deuda abierta). El checkpoint de contrato del Sprint 3a (tarea B5) cerró
+ese carril: encontró y corrigió un drift real — `POST /auth/register` con
+email duplicado filtraba el mensaje crudo de Postgres en vez del
+`422 VALIDATION` + `field: "email"` que pide el contrato (fix en commit
+`b5f30a3`) — cerrando también la última nota `[FE→BE]` pendiente de la
+pregunta 8 de este doc. Ver
 [`../docs/13-sprint3a-avance.md`](../docs/13-sprint3a-avance.md).
+
+**Sprint 3b, carril B, cerrado 4/5** (solo falta B9, diferida junto con la
+tarea 3.3b): `POST /me/links` (B6, commit `11883fe`), `PATCH`/`DELETE
+/me/links/:id` (B7, commit `4deada8`), los perfiles públicos `GET
+/users/:id/profile` y `GET /users/:id/checklists/:checklistId/entries` (B8,
+commit `6e104f2`) y el checkpoint de contrato del sprint (B10, exportó los
+schemas Zod `libraryIndexSchema`/`checklistResponseSchema` que faltaban).
+Además, la `ir.rule` de `ll.checklist.link.copy` pasó de OR a AND (ADR-020,
+commit `d3be430`): el OR original dejaba crear una fila cruzada hacia el link
+de otro usuario portal, que a partir de ahí no podía volver a escribir su
+propio progreso — verificado con dos usuarios portal reales contra el Odoo
+local, y aplicado antes de que `POST /me/links` (el primer endpoint que crea
+copias) llegara a exponerlo. Detalle endpoint por endpoint en
+[14-resumen-implementacion-api.md](./14-resumen-implementacion-api.md) y
+bitácora completa en
+[`../docs/16-sprint3b-avance.md`](../docs/16-sprint3b-avance.md). En
+`ll-odoo` son ya **nueve commits propios, ninguno pusheado**, working tree
+limpio (verificado por `git log`/`git status`) — sigue sin decidirse si se
+dejan locales, se publican como módulo propio o se le proponen a Chano.
+
 Lo que sigue genuinamente bloqueado, solo de producción: el `invitation_scope`
 de la instancia real de Chano (pregunta 8, nota final), qué pasa si el mismo
 email se usa por registro propio y por Twitch (pregunta 8.2), y si su app de

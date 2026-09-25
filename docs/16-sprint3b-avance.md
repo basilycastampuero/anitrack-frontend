@@ -411,7 +411,10 @@ escenarios de accesibilidad con lector de pantalla real siguen sin probarse
   exportarse.
 - Deuda heredada del Sprint 3a: el punto de entrada de logout en la UI
   (verificado en esta sesión: sigue sin ningún componente usando
-  `useLogout`), el alcance de la `ir.rule` de ADR-014 a `base.group_portal`,
+  `useLogout`) **[✅ CERRADO 2026-09-24]** (tarea 4.13 del Sprint 4: menú en
+  el avatar del header + `SettingsPage` real — ver
+  [17-sprint4-avance.md](./17-sprint4-avance.md)), el alcance
+  de la `ir.rule` de ADR-014 a `base.group_portal`,
   y la falta de verificación con lectores de pantalla reales. **#9 a #14 se
   cerraron como perdidos el 2026-09-22** (irreconstruibles, sin
   archivo/línea/escenario) y una revisión nueva sobre el árbol de listas los

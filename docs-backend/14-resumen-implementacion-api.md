@@ -47,16 +47,25 @@ inventar un número.
 | `GET /me/checklists`, `GET /me/checklists/:id/entries`, `GET /me/library-index` | ✅ Implementado | `controllers/api_lists.py` — commit `b708bcb` (tarea B3) | Checkpoint de contrato completo (tarea B5): árbol de 4 niveles, `linkCount`/`aggregatedProgress` verificados contra `link_show_name` real, aislamiento con dos usuarios portal |
 | `POST /me/checklists`, `PATCH /me/checklists/:id`, `DELETE /me/checklists/:id` | ✅ Implementado | `controllers/api_lists.py` — commit `3c4e091` (tarea B4) | Ídem, más detección de ciclos (`_creates_cycle` → `422`, ver "Hallazgos no anticipados") |
 | `POST /me/links` | ✅ Implementado | `controllers/api_lists.py` (más la clave `existing` en el envelope de error, `controllers/api_common.py`) — commit `11883fe` (tarea B6) | Verificado de punta a punta contra el Odoo local como usuario portal real, ocho escenarios: `201` con los datos resueltos del catálogo y no del body; `409 ALREADY_LINKED` con `checklistId`/`checklistName` reales, buscados con el ORM del usuario (nunca `sudo()`, ADR-014); `force: true`; reuso del franchise-link por `(carpeta, franquicia, contentType)`; `422` con `field` cuando `displayNameId` no pertenece al content; copia sincronizada con `isSynced: true`; `404` cuando `syncWithLinkId` es de otro usuario |
-| `PATCH /me/links/:id`, `DELETE /me/links/:id` | 🟡 Implementado y verificado, **sin commitear** | `controllers/api_lists.py` — código en el working tree de `ll-odoo` (tarea B7), todavía no forma parte de ningún commit de `anitrack/rest-catalog-api` | Verificado de punta a punta contra el Odoo local como usuario portal real, ocho escenarios: `PATCH` devuelve el `ListEntry` completo (lo que consume el optimistic update del frontend); los campos `[EXT]` de ADR-004 (`rating`, `startedAt`, `finishedAt`) se ignoran en silencio, sin `422`; `watchedEpisodes` negativo → `422` con `field`; `PATCH` sobre un link sincronizado mueve **todas** sus copias (contando filas, no leyendo una); `DELETE` del último hijo → `204` y cero franchise-links huérfanos; `DELETE` de un franchise-link se lleva a sus hijos por cascada; `PATCH` sobre un franchise-link (renombrar, apagar el progreso) funciona; `PATCH`/`DELETE` de un link de otro usuario → `404` en los dos. No lo des por cerrado hasta que el commit exista |
-| `GET /users/:id/profile`, `GET /users/:id/checklists/:checklistId/entries` | ⬜ Pendiente | — | No hay ninguna ruta escrita todavía. **[FE→BE]** Corresponde a la tarea 3.10 (Perfil público + stats, Sprint 3b), todavía no arrancada |
-| `GET /auth/oauth/twitch` | ⬜ Pendiente | — | No hay ninguna ruta escrita todavía. Corresponde a la tarea B9 / 3.3b (Sprint 3b), todavía no arrancada |
+| `PATCH /me/links/:id`, `DELETE /me/links/:id` | ✅ Implementado | `controllers/api_lists.py` — commit `4deada8` (tarea B7) | Verificado de punta a punta contra el Odoo local como usuario portal real, ocho escenarios: `PATCH` devuelve el `ListEntry` completo (lo que consume el optimistic update del frontend); los campos `[EXT]` de ADR-004 (`rating`, `startedAt`, `finishedAt`) se ignoran en silencio, sin `422`; `watchedEpisodes` negativo → `422` con `field`; `PATCH` sobre un link sincronizado mueve **todas** sus copias (contando filas, no leyendo una); `DELETE` del último hijo → `204` y cero franchise-links huérfanos; `DELETE` de un franchise-link se lleva a sus hijos por cascada; `PATCH` sobre un franchise-link (renombrar, apagar el progreso) funciona; `PATCH`/`DELETE` de un link de otro usuario → `404` en los dos |
+| `GET /users/:id/profile`, `GET /users/:id/checklists/:checklistId/entries` | ✅ Implementado | `controllers/api_public.py` (`ll_webpage`, nuevo) — commit `6e104f2` (tarea B8) | Primer archivo del módulo que atiende sin sesión (`auth="public"`) y expone datos de otro usuario: cae bajo ADR-010 (`sudo()` + filtro explícito), aplicado en los tres dominios (árbol de `publishedChecklists`, agregado de stats, endpoint de entries) para no filtrar listas privadas. `publishedChecklists` es un bosque, no solo raíces publicadas: `checklist_published` es por registro y no se hereda, así que una sub-carpeta publicada bajo una privada es alcanzable por sí misma. Las stats (`totalEntries`, `totalEpisodesWatched`, `byContentType`) se acotan a links que viven en checklists publicadas y cuentan version-links, no franchise-links agrupados. Una checklist privada anidada pedida por la ruta pública da **404, no 403** (decisión de contrato, para no confirmar por status code que el id existe). `imageUrl` viene `null` en el árbol público a propósito: las portadas se sirven por `GET /me/images/:id`, que exige sesión (ADR-019); publicarlas sería superficie nueva fuera de esta tarea |
+| `GET /auth/oauth/twitch` | ⬜ Pendiente | — | No hay ninguna ruta escrita todavía. Corresponde a la tarea B9 / 3.3b (Sprint 3b), diferida junto con esa tarea a la espera de que el dueño del proyecto registre una app de Twitch propia (trabajo fuera de código, no bloqueado por backend) |
 
-Verificado leyendo el código directamente el 2026-09-22 (`git -C ../ll-odoo
-show 11883fe`, `git -C ../ll-odoo diff` para lo sin commitear, y `grep` de
-`@http.route` en los cuatro controladores de
-`odoo-modules/ll_webpage/controllers/`): `POST /me/links` está en el commit
-`11883fe`; `PATCH`/`DELETE /me/links/:id` existen solo en el working tree, sin
-commit; no existe ninguna ruta de `/users/:id/...` ni de `/auth/oauth/twitch`.
+Verificado leyendo el código y el historial de `ll-odoo` el 2026-09-25
+(`git -C ../ll-odoo log --oneline checklist_base..HEAD`, working tree limpio,
+nueve commits, ninguno pusheado; y `git -C ../ll-odoo show 6e104f2` para el
+contenido de `api_public.py`): `POST /me/links` está en `11883fe`,
+`PATCH`/`DELETE /me/links/:id` en `4deada8`, y `GET /users/:id/profile` +
+`GET /users/:id/checklists/:checklistId/entries` en `6e104f2`. No existe
+ninguna ruta de `/auth/oauth/twitch`.
+
+**Actualización (2026-09-25):** primer recorrido manual de la app contra
+este backend real desde la UI (tarea 4.1 del Sprint 4, detalle en
+[`../docs/17-sprint4-avance.md`](../docs/17-sprint4-avance.md)) — sesión
+(login/logout) y `/me/links` (copias sincronizadas entre listas) se
+ejercitaron de punta a punta desde el navegador y no solo por HTTP directo
+como hasta ahora. Uso normal, no adversarial; no agrega escenarios nuevos a
+la tabla ni cambia ningún estado.
 
 ## Hallazgos no anticipados durante la implementación (relevantes para Chano)
 
@@ -180,10 +189,11 @@ B3, B4) y en [02-analisis-backend-odoo.md](./02-analisis-backend-odoo.md).
 
 ## Qué falta para que esto sea real en producción
 
-Aparte de commitear `PATCH`/`DELETE /me/links/:id` (B7, ya verificado) y de
-escribir `/users/:id/...` (B8) y `GET /auth/oauth/twitch` (B9) — arriba —, lo
-que ya está implementado sigue sin poder usarse contra la instancia real de
-Chano porque:
+Del carril B solo falta **B9** (`GET /auth/oauth/twitch`), diferida junto con
+la tarea 3.3b a la espera de que el dueño del proyecto registre una app de
+Twitch propia — trabajo fuera de código, no bloqueado por backend. Aparte de
+eso, lo que ya está implementado sigue sin poder usarse contra la instancia
+real de Chano porque:
 
 - Nunca se pusheó ni se propuso como PR (ver arriba).
 - Depende de que el `invitation_scope` de esa instancia permita alta
